@@ -156,7 +156,30 @@ function fixture(instagram = true, code = script) {
         assert.equal(f.state().failures[0].name, 'AbortError');
         await video.play(); assert.equal(video.paused, false, 'site can start its replacement request immediately');
     }
+    {
+        const f = fixture(), video = f.media(false); video.blocked = true;
+        f.window.__reelBreakOwnPlaybackControls = true;
+        f.visibility(false);
+        await assert.rejects(video.play(), {name: 'NotAllowedError'});
+        assert.equal(f.state().retryButton, null, 'recaps keep their own Play control without a second retry button');
+        video.blocked = false;
+        await video.play();
+        assert.equal(video.paused, false, 'own controls can still resume playback');
+    }
+    {
+        const f = fixture(), video = f.media(true);
+        f.visibility(true);
+        f.visibility(false);
+        for (let i = 0; i < 20; i++) f.visibility(false);
+        await tick();
+        assert.equal(video.plays, 1, 'repeated script injection and visible notifications resume only once');
+        video.blocked = true; video.muted = true;
+        await assert.rejects(video.play(), {name: 'NotAllowedError'});
+        const retryButton = f.state().retryButton;
+        for (let i = 0; i < 20; i++) f.visibility(false);
+        assert.equal(f.state().retryButton, retryButton, 'repeated polls retain one retry control');
+    }
     assert.equal(script.includes('setInterval'), false);
     assert.equal(script.includes("addEventListener('scroll'"), false, 'scrolling never controls playback');
-    console.log('Passed 13 player-ownership scenarios: scroll-snap handoff, policy fallback, cancellation, reused elements, hidden races, manual pause, and native promise semantics.');
+    console.log('Passed 15 player-ownership scenarios: scroll-snap handoff, policy fallback, cancellation, reused elements, hidden races, manual pause, and native promise semantics.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

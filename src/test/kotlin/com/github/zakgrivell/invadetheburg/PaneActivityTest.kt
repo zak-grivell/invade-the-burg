@@ -19,7 +19,7 @@ class PaneActivityTest {
     @Test fun `reads live pane processing state`() {
         assertEquals(PaneActivity("existing-codex-session", true), AirPaneActivity.readKnownPane(FakePane(Activity.PROCESSING)))
         Activity.entries.filter { it != Activity.PROCESSING }.forEach {
-            assertEquals(PaneActivity("existing-codex-session", false), AirPaneActivity.readKnownPane(FakePane(it)))
+            assertEquals(PaneActivity("existing-codex-session", false, it in setOf(Activity.READY, Activity.UNREAD)), AirPaneActivity.readKnownPane(FakePane(it)))
         }
     }
     @Test fun `unrelated and incompatible panes close the break`() {

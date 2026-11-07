@@ -5,8 +5,15 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 import java.net.URI
+import com.github.zakgrivell.invadetheburg.ui.DEFAULT_RECAP_VIDEO
+import com.github.zakgrivell.invadetheburg.ui.normalizeRecapVideo
 
 internal const val DEFAULT_BREAK_URL = "https://www.instagram.com/reels/"
+
+enum class RecapMode(private val label: String) {
+    ALWAYS("Always"), NEVER("Never"), ASK("Ask");
+    override fun toString() = label
+}
 
 data class FavoriteWebsite(var name: String = "", var url: String = "") {
     override fun toString(): String = name
@@ -34,10 +41,27 @@ internal fun normalizeBreakUrl(value: String): String {
 @State(name = "ReelBreakSettings", storages = [Storage("reel-break.xml")])
 class ReelSettings : PersistentStateComponent<ReelSettings.Options> {
     class Options {
+        var recapVideoSource: String = DEFAULT_RECAP_VIDEO
+        var recapMode: RecapMode = RecapMode.ASK
+        var narrationVoiceId: String = ""
         var url: String = DEFAULT_BREAK_URL
         var favorites: MutableList<FavoriteWebsite> = mutableListOf(FavoriteWebsite("Instagram Reels", DEFAULT_BREAK_URL))
     }
     private var options = Options()
+    var recapVideoSource: String
+        get() {
+            if (options.recapVideoSource != DEFAULT_RECAP_VIDEO) return options.recapVideoSource
+            val localDefault = java.nio.file.Path.of(System.getProperty("user.home"), ".config", "reel-break", "recap-video-source")
+            return runCatching { java.nio.file.Files.readString(localDefault).trim().takeIf(String::isNotBlank) }.getOrNull()
+                ?: options.recapVideoSource
+        }
+        set(value) { options.recapVideoSource = normalizeRecapVideo(value) }
+    var recapMode: RecapMode
+        get() = options.recapMode
+        set(value) { options.recapMode = value }
+    var narrationVoiceId: String
+        get() = options.narrationVoiceId
+        set(value) { options.narrationVoiceId = value.trim() }
     var url: String
         get() = options.url
         set(value) { options.url = normalizeBreakUrl(value) }
@@ -47,6 +71,9 @@ class ReelSettings : PersistentStateComponent<ReelSettings.Options> {
     override fun getState(): Options = options
     override fun loadState(state: Options) {
         options = Options().apply {
+            recapVideoSource = state.recapVideoSource.ifBlank { DEFAULT_RECAP_VIDEO }
+            recapMode = state.recapMode
+            narrationVoiceId = state.narrationVoiceId.trim()
             url = runCatching { normalizeBreakUrl(state.url) }.getOrDefault(DEFAULT_BREAK_URL)
             favorites = state.favorites.mapNotNull {
                 runCatching { normalizeFavorites(listOf(it)).single() }.getOrNull()

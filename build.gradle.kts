@@ -76,3 +76,13 @@ tasks.register<JavaExec>("smokeTestMedia") {
     systemProperty("java.awt.headless", "false")
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
+
+tasks.register<JavaExec>("smokeTestRecapVideo") {
+    group = "verification"
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath + sourceSets.test.get().compileClasspath + mediaSmokeRuntime
+    mainClass = "com.github.zakgrivell.invadetheburg.RecapVideoSmoke"
+    providers.gradleProperty("recapSmokeVideo").orNull?.let { args(it) }
+    systemProperty("java.awt.headless", "false")
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+}

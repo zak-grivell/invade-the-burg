@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">
+<title>Your chat recap</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#000;color:#fff;font-family:system-ui,sans-serif}body{display:flex;align-items:center;justify-content:center;overflow:hidden}.reel{width:min(100vw,56.25vh);height:min(100vh,177.77778vw);aspect-ratio:9/16;position:relative;overflow:hidden;background:#111}.footage{position:absolute;inset:0}video{width:100%;height:100%;position:absolute;inset:0;object-fit:cover}.shade{position:absolute;inset:0;background:linear-gradient(transparent 55%,rgba(0,0,0,.75))}#caption{position:absolute;top:42%;left:7%;right:7%;text-align:center;font-size:clamp(18px,4.2vh,44px);font-weight:900;line-height:1.15;text-shadow:0 2px 4px #000,2px 0 #000,-2px 0 #000;pointer-events:none}.controls{position:absolute;bottom:0;left:0;right:0;padding:14px;display:grid;gap:8px}audio{display:none!important}button{background:#fff;color:#111;font:800 14px system-ui;border:0;border-radius:30px;padding:10px 20px;cursor:pointer;justify-self:center}#status{font-size:11px;color:#eee;margin:0;text-align:center}#video-error{position:absolute;top:12px;left:12px;right:12px;background:#181820df;padding:10px;border-radius:8px;font-size:12px}button:focus-visible{outline:3px solid white;outline-offset:2px}
+</style></head><body><main class="reel" aria-label="Chat response video"><section class="footage"><video id="background" muted loop playsinline preload="auto" referrerpolicy="no-referrer"></video><div class="shade"></div><p id="video-error" hidden>Video couldn't load. Change the recap video in Reel Break settings.</p><div id="caption" aria-live="off"></div><div class="controls"><button id="play" hidden disabled>Play</button><audio id="voice" hidden preload="auto" src="voice.wav"></audio><p id="status" role="status">Loading video and voice…</p></div></section></main>
+<script>
+function decodeBase64(value){return new TextDecoder().decode(Uint8Array.from(atob(value),c=>c.charCodeAt(0)));}
+const data = /*RECAP_DATA*/;
+const voice=document.getElementById('voice'), video=document.getElementById('background'), button=document.getElementById('play'), caption=document.getElementById('caption'), status=document.getElementById('status');
+const errorBox=document.getElementById('video-error');
+video.muted=true;
+video.loop=true;voice.loop=false;
+let ready=false, active=false, autoPlayAttempted=false, starting=null, startToken=0, retryAvailable=true;
+let completed=false, hostStartPending=false;
+let started=false, resumeOnReveal=false, revealPending=false;
+const afterLayout=fn=>requestAnimationFrame(()=>requestAnimationFrame(fn));
+function pausePair(){voice.pause();video.pause();}
+window.__reelBreakActivateRecap=function(value){
+    value=Boolean(value) && !document.hidden && !completed;
+    if(active===value)return;
+    active=value;
+    if(!active){
+        resumeOnReveal=!voice.paused || !video.paused || Boolean(starting);
+        startToken++;hostStartPending=false;pausePair();return;
+    }
+    revealPending=true;
+    afterLayout(()=>{
+        revealPending=false;
+        if(!active)return;
+        if(!started){voice.currentTime=0;video.currentTime=0;updateCaption();}
+        if(resumeOnReveal && ready){if(!starting){resumeOnReveal=false;requestPlayback();}}else maybeAutoPlay();
+    });
+};
+// DOM readiness and RAF callbacks do not carry WebKit's user gesture. Ask the
+// native host to re-enter synchronously through evaluateJavaScript instead.
+function requestPlayback(){
+    if(completed || !active || !ready || revealPending || hostStartPending || starting)return;
+    if(window.reelBreakRecapRequestPlayback){
+        hostStartPending=true;
+        window.reelBreakRecapRequestPlayback('');
+    }else play();
+}
+window.__reelBreakStartRecapFromHost=function(){
+    hostStartPending=false;
+    if(completed || !active || !ready || revealPending)return;
+    play();
+};
+function notifyReady(){if(window.reelBreakRecapReady)window.reelBreakRecapReady('');}
+function maybeAutoPlay(){if(data.autoPlay && active && !revealPending && ready && !autoPlayAttempted){autoPlayAttempted=true;requestPlayback();}}
+function checkReady(){
+    ready=video.readyState>=2 && voice.readyState>=2 && !video.error && !voice.error;
+    button.disabled=!ready; voice.hidden=true;
+    if(ready){
+        status.textContent='';
+        notifyReady();
+        maybeAutoPlay();
+    }
+}
+function videoFailure(){
+    // A blocked or cancelled play request is not a corrupt/missing video.
+    if(!video.error)return;
+    ready=false;button.hidden=true;button.disabled=true;voice.hidden=true;
+    voice.pause();
+    errorBox.hidden=false;status.textContent='Video unavailable. Change the recap video in Reel Break settings.';notifyReady();
+}
+function handlePlayError(error){
+    if(video.error){videoFailure();return;}
+    if(!active)return;
+    status.textContent='Tap Play to start the recap.';
+    button.textContent='Play';button.hidden=false;
+}
+const words=data.text.split(/\s+/), chunks=[];for(let i=0;i<words.length;i+=7)chunks.push(words.slice(i,i+7).join(' '));
+function updateCaption(){const fraction=Number.isFinite(voice.duration)&&voice.duration>0?voice.currentTime/voice.duration:0;caption.textContent=chunks[Math.min(chunks.length-1,Math.floor(fraction*chunks.length))]||'';}
+function play(){
+    if(completed || !ready || !active || revealPending || starting)return starting;
+    if(!started){voice.currentTime=0;video.currentTime=0;}
+    if(!voice.paused && !video.paused)return Promise.resolve();
+    if(voice.ended)voice.currentTime=0;
+    const token=++startToken;
+    // Launch both in the same gesture, but treat them as a single playback transaction.
+    // A policy rejection must never leave narration running over a stopped picture.
+    let voiceRequest, videoRequest;
+    try{videoRequest=video.play();voiceRequest=voice.play();}
+    catch(error){video.pause();voice.pause();handlePlayError(error);return;}
+    starting=Promise.all([Promise.resolve(videoRequest),Promise.resolve(voiceRequest)]).then(()=>{
+        if(!active || token!==startToken){voice.pause();video.pause();return;}
+        started=true;button.hidden=true;status.textContent='';retryAvailable=true;
+    }).catch(error=>{
+        voice.pause();video.pause();
+        if(!active || token!==startToken)return;
+        if(error && error.name==='NotAllowedError' && retryAvailable){
+            retryAvailable=false;
+            afterLayout(()=>{if(active && token===startToken)requestPlayback();});
+        }else handlePlayError(error);
+    }).finally(()=>{
+        starting=null;
+        if(active && resumeOnReveal && ready)afterLayout(()=>{
+            if(active && resumeOnReveal){resumeOnReveal=false;requestPlayback();}
+        });
+    });
+    return starting;
+}
+button.addEventListener('click',()=>{retryAvailable=true;play();});
+voice.addEventListener('pause',()=>{video.pause();button.textContent='Play';});
+voice.addEventListener('ended',()=>{
+    if(completed)return;
+    completed=true;active=false;resumeOnReveal=false;startToken++;
+    pausePair();button.hidden=true;
+    if(window.reelBreakRecapFinished)window.reelBreakRecapFinished('');
+});
+voice.addEventListener('timeupdate',updateCaption);
+for(const event of ['loadeddata','canplay','canplaythrough']){video.addEventListener(event,checkReady);voice.addEventListener(event,checkReady);}
+video.addEventListener('error',videoFailure);
+voice.addEventListener('error',()=>{button.hidden=true;button.disabled=true;status.textContent='Voice audio could not load. Close this recap and try another turn.';notifyReady();});
+document.addEventListener('visibilitychange',()=>window.__reelBreakActivateRecap(Boolean(window.__reelBreakPaneActive) && !document.hidden));
+window.addEventListener('pagehide',()=>window.__reelBreakActivateRecap(false));
+video.src=data.video;
+updateCaption();checkReady();
+</script></body></html>

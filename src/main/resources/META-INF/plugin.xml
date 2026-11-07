@@ -8,6 +8,7 @@
     ]]></description>
     <depends>com.intellij.modules.platform</depends>
     <extensions defaultExtensionNs="com.intellij">
+        <notificationGroup id="Reel Break Narration" displayType="BALLOON" isLogByDefault="true"/>
         <applicationConfigurable id="dev.reelbreak.settings" parentId="tools" displayName="Reel Break"
             instance="com.github.zakgrivell.invadetheburg.settings.ReelSettingsConfigurable"/>
         <postStartupActivity implementation="com.github.zakgrivell.invadetheburg.startup.ReelStartupActivity"/>

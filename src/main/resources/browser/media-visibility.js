@@ -31,7 +31,7 @@
             return best;
         };
         const updateRetryButton = function () {
-            if (state.hidden || !state.lastError || !Array.from(state.paused).some(canResume)) {
+            if (window.__reelBreakOwnPlaybackControls || state.hidden || !state.lastError || !Array.from(state.paused).some(canResume)) {
                 if (state.retryButton) state.retryButton.remove();
                 state.retryButton = null;
                 return;
