@@ -3,13 +3,13 @@
     <name>Reel Break</name>
     <vendor>Reel Break</vendor>
     <description><![CDATA[
-        <p>Open a configurable website in front of the active AI pane while the agent in your open JetBrains Air pane works. The overlay hides and HTML audio/video pauses when the prompt completes, fails, is cancelled, or needs your permission.</p>
-        <p>Automatically follows the selected Air session. Requires JetBrains 2026.3 with Air. No agent configuration is needed. Uses WebKit on macOS, WebView2 on Windows, and WebKitGTK on Linux. Windows requires the WebView2 Runtime; Linux requires WebKitGTK and media codecs. Instagram sign-in may be required.</p>
+        <p>Open a configurable website in front of the active AI pane while the agent in your open zak-grivell Air pane works. The overlay hides and HTML audio/video pauses when the prompt completes, fails, is cancelled, or needs your permission.</p>
+        <p>Automatically follows the selected Air session. Requires zak-grivell 2026.3 with Air. No agent configuration is needed. Uses WebKit on macOS, WebView2 on Windows, and WebKitGTK on Linux. Windows requires the WebView2 Runtime; Linux requires WebKitGTK and media codecs. Instagram sign-in may be required.</p>
     ]]></description>
     <depends>com.intellij.modules.platform</depends>
     <extensions defaultExtensionNs="com.intellij">
         <applicationConfigurable id="dev.reelbreak.settings" parentId="tools" displayName="Reel Break"
-            instance="org.jetbrains.plugins.template.settings.ReelSettingsConfigurable"/>
-        <postStartupActivity implementation="org.jetbrains.plugins.template.startup.ReelStartupActivity"/>
+            instance="com.github.zakgrivell.invadetheburg.settings.ReelSettingsConfigurable"/>
+        <postStartupActivity implementation="com.github.zakgrivell.invadetheburg.startup.ReelStartupActivity"/>
     </extensions>
 </idea-plugin>
