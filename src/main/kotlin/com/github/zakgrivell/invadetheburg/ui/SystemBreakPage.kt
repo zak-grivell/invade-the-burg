@@ -108,8 +108,7 @@ internal class SystemBreakPage(url: String, private val platform: BrowserPlatfor
     }
     override fun setActive(active: Boolean) { this.active = active; if (!disposed) pushVisibility() }
     private fun pushVisibility() {
-        browser?.eval(mediaScript.replace("/*HIDDEN*/", (!active).toString()) +
-            if (active) "\nif (window.__reelBreakRetryMedia) window.__reelBreakRetryMedia(false);" else "")
+        browser?.eval(mediaScript.replace("/*HIDDEN*/", (!active).toString()))
     }
     override fun dispose() {
         disposed = true

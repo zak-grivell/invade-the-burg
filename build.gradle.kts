@@ -23,7 +23,7 @@ dependencies {
 
 intellijPlatform {
     pluginConfiguration {
-        version = "1.2.2"
+        version = "1.2.3"
         ideaVersion { sinceBuild = "263"; untilBuild = "263.*" }
     }
 }
@@ -36,7 +36,7 @@ tasks.register<JavaExec>("smokeTestMedia") {
     description = "Verify native H.264 playback and page retention using a local test video"
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath + mediaSmokeRuntime
-    mainClass = "org.jetbrains.plugins.template.NativeMediaSmoke"
+    mainClass = "com.github.zakgrivell.invadetheburg.NativeMediaSmoke"
     systemProperty("java.awt.headless", "false")
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }

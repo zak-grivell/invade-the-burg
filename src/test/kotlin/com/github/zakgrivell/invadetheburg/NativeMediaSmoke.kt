@@ -114,27 +114,38 @@ object NativeMediaSmoke {
             }
             check(nextPlaying) { "The next autoplay video did not start." }
             println("PASS: next video started after ${(System.nanoTime() - nextStarted) / 1_000_000} ms.")
-            eval("""
-                const v = document.getElementById('probe');
-                const nativePlay = v.play.bind(v);
-                let interruptions = 2;
-                v.play = function () {
-                    if (interruptions-- > 0) return Promise.reject(new DOMException('Controlled interruption', 'AbortError'));
-                    return nativePlay();
-                };
-                v.pause();
-                return 1;
-            """.trimIndent())
-            var recovered = false
-            repeat(24) {
-                if (!recovered) {
-                    Thread.sleep(250)
-                    recovered = eval("return window.__reelBreakMediaState.failures.filter(f => f.name === 'AbortError').length >= 2 && !document.getElementById('probe').paused ? 1 : 0;") == "1"
+            // Model a scroll-snap player: request the incoming video while the outgoing one
+            // still occupies most of the viewport. The plugin must not veto the site's handoff.
+            repeat(12) { transition ->
+                eval("""
+                    const outgoing = document.getElementById('probe');
+                    outgoing.style.cssText = 'position:fixed;top:0;left:0;width:600px;height:340px';
+                    const incoming = document.createElement('video');
+                    incoming.id = 'incoming'; incoming.muted = true; incoming.playsInline = true; incoming.loop = true;
+                    incoming.style.cssText = 'position:fixed;top:' + (innerHeight - 60) + 'px;left:0;width:600px;height:340px';
+                    incoming.src = '/video.mp4?handoff=$transition';
+                    document.body.appendChild(incoming);
+                    window.handoffError = null;
+                    incoming.play().then(function () {
+                        outgoing.pause(); outgoing.remove();
+                        incoming.id = 'probe'; incoming.style.top = '0px';
+                    }, function (error) { window.handoffError = error.name; });
+                    return 1;
+                """.trimIndent())
+                var handedOff = false
+                repeat(40) {
+                    if (!handedOff) {
+                        Thread.sleep(100)
+                        handedOff = eval("const v=document.getElementById('probe'); return !window.handoffError && v && v.currentSrc.includes('?handoff=$transition') && !v.paused && v.currentTime > 0.1 ? 1 : 0;") == "1"
+                    }
                 }
+                check(handedOff) { "Site-owned scroll handoff $transition was interrupted: " + eval("return window.handoffError;") }
             }
-            check(recovered) { "Interrupted playback did not recover automatically." }
-            eval("delete document.getElementById('probe').play; return 1;")
-            println("PASS: native playback recovered automatically after two controlled interruptions without a click.")
+            println("PASS: 12 consecutive site-owned scroll-snap handoffs without autoplay attributes, retries, or clicks.")
+            eval("document.getElementById('probe').pause(); return 1;")
+            Thread.sleep(1000)
+            check(eval("return document.getElementById('probe').paused ? 1 : 0;") == "1") { "The plugin restarted an explicit site pause." }
+            eval("document.getElementById('probe').play().catch(function() {}); return 1;")
             // Stay visible beyond the former 20-second watchdog, then exercise more prompt cycles.
             Thread.sleep(22_000)
             check(eval("return window.retainedMarker;") == "\"keep-this-document\"") { "Startup watchdog destroyed a working page." }

@@ -5,196 +5,158 @@ const path = require('node:path');
 const script = fs.readFileSync(path.join(__dirname, '../src/main/resources/browser/media-visibility.js'), 'utf8');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-function fixture(instagram = false) {
-    let clock = 0, timerId = 0; const timers = new Map();
-    const later = (fn, ms = 0) => { const id = ++timerId; timers.set(id, {fn, at: clock + ms}); return id; };
-    const advance = ms => { clock += ms; for (const [id, timer] of Array.from(timers)) if (timer.at <= clock) { timers.delete(id); timer.fn(); } };
-    const listeners = {}, windowListeners = {}, videos = [], messages = [];
-    const document = {
-        addEventListener(name, fn) { (listeners[name] ||= []).push(fn); },
-        querySelectorAll() { return videos; },
-        createElement() {
-            return { style: {}, isConnected: false, setAttribute() {},
-                addEventListener(name, fn) { this[name] = fn; },
-                remove() { this.isConnected = false; } };
-        },
-        documentElement: { appendChild(button) { button.isConnected = true; } }
-    };
-    const window = { location: {hostname: instagram ? 'www.instagram.com' : 'example.com', pathname: '/reels/'}, getComputedStyle() { return {display: 'block', visibility: 'visible', opacity: '1'}; }, frames: [], innerWidth: 1000, innerHeight: 800,
-        addEventListener(name, fn) { windowListeners[name] = fn; } };
+function fixture(instagram = true, code = script) {
+    let clock = 0, id = 0;
+    const timers = new Map(), videos = [], listeners = {}, windowListeners = {}, messages = [];
+    const emit = (name, target) => (listeners[name] || []).forEach(fn => fn({target}));
+    class Media {
+        constructor(playing = false) {
+            Object.assign(this, {tagName: 'VIDEO', paused: !playing, ended: false, isConnected: true,
+                plays: 0, pauses: 0, muted: false, soundBlocked: false, blocked: false, readyState: 4,
+                src: 'video.mp4', deferred: null, failures: [], rect: {top: 0, left: 0, right: 640, bottom: 480}});
+            videos.push(this);
+        }
+        getBoundingClientRect() { return this.rect; }
+        pause() { this.pauses++; const changed = !this.paused; this.paused = true; if (changed) emit('pause', this); }
+        play() {
+            this.plays++;
+            const failure = this.failures.shift() || ((this.blocked || this.soundBlocked && !this.muted) ? 'NotAllowedError' : null);
+            if (failure) return Promise.reject(Object.assign(new Error(failure), {name: failure}));
+            this.paused = false; emit('play', this);
+            const promise = this.deferred || Promise.resolve();
+            return promise.then(() => { if (!this.paused) emit('playing', this); });
+        }
+    }
+    const window = {location: {hostname: instagram ? 'www.instagram.com' : 'example.com'}, frames: [], innerWidth: 1000, innerHeight: 800,
+        getComputedStyle: () => ({display: 'block', visibility: 'visible', opacity: '1'}),
+        addEventListener(name, fn) { windowListeners[name] = fn; }};
     window.parent = window;
-    const context = vm.createContext({window, document, setTimeout: later, clearTimeout: id => timers.delete(id), Date: {now: () => clock}, requestAnimationFrame: fn => later(fn)});
-    const emit = (name, target, extra = {}) => (listeners[name] || []).forEach(fn => fn({target, ...extra}));
-    const media = (playing) => {
-        const item = { tagName: 'VIDEO', paused: !playing, ended: false, isConnected: true,
-            readyState: 4, closest() { return this; }, failures: [], plays: 0, blocked: false, soundBlocked: false, muted: false, src: "video.mp4", autoplay: false, deferred: null,
-            rect: {top: 0, left: 0, right: 640, bottom: 480, width: 640, height: 480},
-            getBoundingClientRect() { return this.rect; },
-            pause() { const changed = !this.paused; this.paused = true; if (changed) emit('pause', this); },
-            play() {
-                this.plays++;
-                if (this.failures.length) return Promise.reject(Object.assign(new Error('Interrupted'), {name: this.failures.shift()}));
-                if (this.blocked || (this.soundBlocked && !this.muted)) return Promise.reject(Object.assign(new Error('Gesture required'), {name: 'NotAllowedError'}));
-                this.paused = false; emit('play', this);
-                return this.deferred || Promise.resolve();
-            }
-        };
-        videos.push(item);
-        return item;
+    const document = {
+        addEventListener(name, fn) { (listeners[name] ||= []).push(fn); }, querySelectorAll: () => videos,
+        documentElement: {appendChild(button) { button.isConnected = true; }},
+        createElement: () => ({style: {}, setAttribute() {}, addEventListener(name, fn) { this[name] = fn; }, remove() { this.isConnected = false; }})
     };
-    return {window, media, emit, messages, windowListeners, advance,
-        async settle() { for (const ms of [180, 0, 200]) { advance(ms); await tick(); } },
+    const context = vm.createContext({window, document, HTMLMediaElement: Media, Date: {now: () => clock},
+        setTimeout(fn, ms) { timers.set(++id, {fn, at: clock + ms}); return id; }, clearTimeout(id) { timers.delete(id); }});
+    return {window, emit, messages, windowListeners, media: playing => new Media(playing),
         state: () => window.__reelBreakMediaState,
-        visibility: hidden => vm.runInContext(script.replace('/*HIDDEN*/', String(hidden)), context)};
+        visibility: hidden => vm.runInContext(code.replace('/*HIDDEN*/', String(hidden)), context),
+        advance(ms) { clock += ms; for (const [id, t] of Array.from(timers)) if (t.at <= clock) { timers.delete(id); t.fn(); } }};
 }
 
 (async function () {
     {
-        const f = fixture(), playing = f.media(true), manual = f.media(false);
+        const f = fixture(), outgoing = f.media(true), incoming = f.media(false);
+        incoming.rect = {top: 600, left: 0, right: 640, bottom: 1080};
+        f.visibility(false);
+        await incoming.play();
+        assert.equal(incoming.paused, false, 'incoming Reel may start before it occupies most of the viewport');
+        assert.equal(incoming.pauses, 0, 'plugin must never interrupt site playback during scroll-snap');
+        outgoing.pause();
+        incoming.rect.top = 0; incoming.rect.bottom = 480;
+        f.advance(10000); await tick();
+        assert.equal(incoming.paused, false);
+        assert.equal(outgoing.plays, 0, 'plugin does not restart the Reel Instagram paused');
+    }
+    {
+        const f = fixture(), video = f.media(false); video.soundBlocked = true;
+        f.visibility(false); await video.play();
+        assert.equal(video.plays, 2); assert.equal(video.muted, true); assert.equal(video.paused, false);
+        assert.equal(video.pauses, 0, 'policy fallback does not pause/restart the player');
+        assert.equal(f.state().attempting.size, 0);
+    }
+    {
+        const f = fixture(false), video = f.media(false); video.soundBlocked = true;
+        f.visibility(false);
+        await assert.rejects(video.play(), {name: 'NotAllowedError'});
+        assert.equal(video.plays, 1); assert.equal(video.muted, false, 'unrelated websites keep their own policy');
+        assert.equal(f.state().failures[0].name, 'NotAllowedError');
+    }
+    {
+        const f = fixture(), video = f.media(false); video.blocked = true;
+        f.visibility(false);
+        await assert.rejects(video.play(), {name: 'NotAllowedError'});
+        assert.equal(video.plays, 2, 'only one muted fallback is attempted');
+        f.advance(60000); await tick(); assert.equal(video.plays, 2, 'no speculative autoplay loop');
+        assert.equal(f.state().retryButton.isConnected, true);
+        video.blocked = false; f.state().retryButton.click(); await tick();
+        assert.equal(video.paused, false); assert.equal(f.state().retryButton, null);
+    }
+    {
+        const f = fixture(), playing = f.media(true), manuallyPaused = f.media(false);
         f.visibility(true); assert.equal(playing.paused, true);
         f.visibility(false); await tick();
-        assert.equal(playing.paused, false); assert.equal(playing.plays, 1);
-        assert.equal(manual.plays, 0);
-        f.visibility(false); await tick(); assert.equal(playing.plays, 1);
+        assert.equal(playing.paused, false); assert.equal(manuallyPaused.plays, 0);
+        playing.pause(); f.advance(60000); await tick();
+        assert.equal(playing.paused, true, 'manual pauses are authoritative without timing guesses');
+        for (let i = 0; i < 20; i++) f.visibility(false);
+        assert.equal(playing.plays, 1, 'lifecycle notifications cannot restart a manually paused Reel');
     }
     {
         const f = fixture(), video = f.media(true);
-        f.visibility(true); video.blocked = true; f.visibility(false); await tick();
-        assert.equal(f.state().paused.has(video), true, 'rejected media remains queued');
-        assert.equal(f.state().lastError, 'NotAllowedError');
-        assert.equal(f.state().retryButton.isConnected, true, 'a real click is available');
-        for (let i = 0; i < 240; i++) f.visibility(false);
-        assert.equal(video.plays, 1, 'does not spin on rejected autoplay');
-        video.blocked = false; f.state().retryButton.click(); await tick();
-        assert.equal(video.paused, false); assert.equal(f.state().paused.size, 0);
-        assert.equal(f.state().retryButton, null);
+        f.visibility(true); video.pause(); f.visibility(false); await tick();
+        assert.equal(video.plays, 0, 'a site pause while hidden cancels retained playback');
     }
     {
         const f = fixture(), video = f.media(true);
-        f.visibility(true);
+        f.visibility(true); video.src = 'reused-element.mp4'; f.visibility(false); await tick();
+        assert.equal(video.plays, 0, 'retained resume cannot play a different Reel in a reused element');
+        await video.play(); assert.equal(video.plays, 1, 'new source follows the site’s explicit play request');
+    }
+    {
+        const f = fixture(), video = f.media(false);
+        f.visibility(false);
+        let reject;
+        video.deferred = new Promise((_, fail) => { reject = fail; });
+        const result = video.play(); video.pause();
+        reject(Object.assign(new Error('Site cancelled'), {name: 'AbortError'}));
+        await assert.rejects(result, {name: 'AbortError'});
+        assert.equal(f.state().failures.length, 0, 'intentional cancellation is not reported or retried');
+        f.advance(10000); await tick(); assert.equal(video.plays, 1);
+    }
+    {
+        const f = fixture(), video = f.media(false); f.visibility(false);
         let resolve;
         video.deferred = new Promise(done => { resolve = done; });
-        f.visibility(false); f.visibility(true); resolve(); await tick();
-        assert.equal(video.paused, true, 'late play completion cannot resume hidden media');
-        assert.equal(f.state().paused.has(video), true);
+        const result = video.play(); f.visibility(true); resolve(); await result;
+        assert.equal(video.paused, true, 'late completion cannot resume hidden media');
         video.deferred = null; f.visibility(false); await tick(); assert.equal(video.paused, false);
     }
     {
-        const f = fixture(), removed = f.media(true), ended = f.media(true);
-        f.visibility(true); removed.isConnected = false; ended.ended = true;
-        f.visibility(false); await tick();
-        assert.equal(removed.plays, 0); assert.equal(ended.plays, 0);
-        assert.equal(f.state().paused.size, 0);
+        const f = fixture(), video = f.media(false); f.visibility(false);
+        let resolve;
+        video.deferred = new Promise(done => { resolve = done; });
+        const result = video.play(); f.advance(10000); await tick();
+        assert.equal(video.pauses, 0, 'slow video loading is never aborted by a watchdog');
+        video.deferred = null; f.window.__reelBreakRetryMedia(true); await tick();
+        resolve(); await result;
+        assert.equal(video.paused, false, 'pending native playback does not lock retry');
     }
     {
-        const f = fixture(); f.visibility(true);
-        const video = f.media(false); video.play(); await tick();
-        assert.equal(video.paused, true, 'site autoplay remains paused while hidden');
-        f.visibility(false); await tick(); assert.equal(video.paused, false);
-        video.rect.top = 900; video.rect.bottom = 1380;
-        const next = f.media(false); next.autoplay = true; f.emit('loadeddata', next); await f.settle();
-        assert.equal(next.paused, false, 'a new autoplay video can start without Java polling');
+        const f = fixture(), front = f.media(true), back = f.media(true), removed = f.media(true);
+        back.rect.top = 900; back.rect.bottom = 1380;
+        f.visibility(true); removed.isConnected = false;
+        f.visibility(false); await tick();
+        assert.equal(front.paused, false); assert.equal(back.paused, true); assert.equal(removed.plays, 0);
     }
     {
         const f = fixture(), video = f.media(true);
         f.window.frames.push({postMessage(data) { f.messages.push(data); }});
-        f.visibility(true);
-        assert.equal(f.messages.at(-1).hidden, true);
+        f.visibility(true); assert.equal(f.messages.at(-1).hidden, true);
         f.windowListeners.message({source: {}, data: {reelBreakVisibility: true, hidden: false}});
-        assert.equal(f.state().hidden, true, 'unrelated window messages are ignored');
+        assert.equal(f.state().hidden, true);
         f.windowListeners.message({source: f.window.parent, data: {reelBreakVisibility: true, hidden: false}});
         await tick(); assert.equal(video.paused, false);
     }
     {
-        const f = fixture(true), current = f.media(false), background = f.media(false);
-        current.soundBlocked = true;
-        background.autoplay = true; background.rect.top = 900; background.rect.bottom = 1380;
-        f.visibility(false); await f.settle();
-        assert.equal(current.paused, false, 'current Reel starts without a click');
-        assert.equal(current.muted, true, 'sound rejection falls back to muted autoplay');
-        assert.equal(current.plays, 2);
-        assert.equal(background.plays, 0, 'preloaded background Reel never starts');
-        current.rect.top = -900; current.rect.bottom = -420;
-        background.rect.top = 0; background.rect.bottom = 480;
-        f.emit('scroll', null); await f.settle();
-        assert.equal(current.paused, true);
-        assert.equal(background.paused, false, 'scrolling to the next Reel starts it');
-        f.emit('click', background, {isTrusted: true}); background.pause();
-        f.emit('canplay', background); await f.settle();
-        assert.equal(background.paused, true, 'same Reel is not restarted after a manual pause');
-        background.src = 'next-source.mp4';
-        f.emit('loadeddata', background); await f.settle();
-        assert.equal(background.paused, false, 'reused video element starts its new source');
-    }
-    {
-        const f = fixture(), video = f.media(true);
-        f.visibility(true); video.deferred = new Promise(() => {});
-        f.visibility(false); f.advance(8000); await tick();
-        assert.equal(f.state().attempting.size, 0, 'a stalled promise releases its retry lock');
-        assert.equal(f.state().lastError, 'PlaybackTimeout');
-        video.deferred = null; f.state().retryButton.click(); await tick();
-        assert.equal(video.paused, false, 'retry succeeds after timeout');
-    }
-    {
-        const f = fixture(), front = f.media(true), back = f.media(true);
-        back.rect.top = 900; back.rect.bottom = 1380;
-        f.visibility(true); f.visibility(false); await tick();
-        assert.equal(front.paused, false);
-        assert.equal(back.paused, true, 'offscreen queued media does not resume');
-    }
-    {
-        const f = fixture(true), video = f.media(false);
-        let completeOld;
-        video.deferred = new Promise(resolve => { completeOld = resolve; });
-        f.visibility(false); await f.settle();
-        assert.equal(f.state().attempting.size, 1);
-        video.src = 'replacement.mp4'; video.deferred = null;
-        f.emit('loadedmetadata', video); await f.settle();
-        assert.equal(video.plays, 2, 'a changed source cancels the old pending attempt');
-        assert.equal(f.state().attempting.size, 0);
-        completeOld(); await tick();
-        assert.equal(video.paused, false, 'obsolete promise cannot change current playback state');
-    }
-    {
-        const f = fixture(true), video = f.media(false);
-        video.failures = ['AbortError', 'AbortError'];
-        f.visibility(false); await f.settle();
-        assert.equal(video.plays, 1);
-        f.advance(300); await tick(); assert.equal(video.plays, 2);
-        f.advance(700); await tick(); assert.equal(video.plays, 3);
-        assert.equal(video.paused, false, 'interrupted playback recovers without a click');
-        assert.equal(f.state().failures.length, 2);
-        video.pause(); f.advance(1400); await tick();
-        assert.equal(video.paused, false, 'a site pause just after playback recovers');
-    }
-    {
-        const f = fixture(true), video = f.media(false);
-        video.failures = Array(20).fill('AbortError');
-        f.visibility(false); await f.settle();
-        for (let i = 0; i < 10; i++) { f.advance(2000); await tick(); }
-        assert.equal(video.plays, 4, 'automatic retries are bounded');
-        for (let i = 0; i < 10; i++) { f.emit('canplay', video); await f.settle(); }
-        assert.equal(video.plays, 4, 'readiness events do not reset the retry budget');
-    }
-    {
-        const f = fixture(true), video = f.media(false);
-        video.readyState = 1;
-        f.visibility(false); await f.settle(); assert.equal(video.plays, 0, 'waits for video data');
-        video.readyState = 4; f.emit('canplay', video); await f.settle(); assert.equal(video.plays, 1);
-        f.emit('click', video, {isTrusted: true}); video.pause();
-        f.emit('canplay', video); await f.settle(); f.advance(5000); await tick();
-        assert.equal(video.paused, true, 'manual pause survives subsequent readiness events');
-    }
-    {
-        const f = fixture(true), video = f.media(false);
-        f.visibility(false); f.advance(0);
-        for (let i = 0; i < 6; i++) { f.emit('scroll', null); f.advance(100); await tick(); }
-        assert.equal(video.plays, 0, 'does not start midway through scrolling');
-        await f.settle(); assert.equal(video.plays, 1);
-        video.failures = ['AbortError']; video.pause();
-        f.visibility(true); f.advance(5000); await tick();
-        assert.equal(video.plays, 1, 'hiding cancels scheduled retries');
+        const f = fixture(), video = f.media(false); f.visibility(false);
+        video.failures = ['AbortError'];
+        await assert.rejects(video.play(), {name: 'AbortError'});
+        f.advance(20000); await tick(); assert.equal(video.plays, 1, 'website cancellations retain native promise semantics');
+        assert.equal(f.state().failures[0].name, 'AbortError');
+        await video.play(); assert.equal(video.paused, false, 'site can start its replacement request immediately');
     }
     assert.equal(script.includes('setInterval'), false);
-    console.log('Passed 14 media lifecycle scenarios, including automatic Reel switching, muted autoplay fallback, background exclusion, source reuse, manual pause, and stalled-promise recovery.');
+    assert.equal(script.includes("addEventListener('scroll'"), false, 'scrolling never controls playback');
+    console.log('Passed 13 player-ownership scenarios: scroll-snap handoff, policy fallback, cancellation, reused elements, hidden races, manual pause, and native promise semantics.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
