@@ -15,10 +15,13 @@ import java.util.concurrent.Executor
  * - Each stretch start is predicted once; when the stretch closes, `predicted_p50` is logged next to the actual duration.
  * - While WORKING, an advisory prediction is logged at debug level at most every [ADVISORY_INTERVAL_MS].
  * - History is the log directory plus seed file (loaded in the background) plus stretches closed since startup.
+ * - Rebuilding the predictor sorts the whole history, so it runs on [rebuildExecutor] and is swapped in through a
+ *   volatile reference; the lock held by [observe] only ever covers O(1) work.
  */
 internal class EtaMonitor(
     sink: LineSink,
-    private val predictorFactory: (List<Double>) -> EtaPredictorApi = { StubEtaPredictor },
+    private val rebuildExecutor: Executor = Executor { it.run() },
+    private val predictorFactory: (List<Double>) -> EtaPredictorApi = { EtaPredictor(it) },
     private val zone: ZoneId = ZoneId.systemDefault(),
     private val info: (String) -> Unit = {},
     private val debug: (String) -> Unit = {},
@@ -26,7 +29,9 @@ internal class EtaMonitor(
     private val tracker = AgentStateTracker()
     private var baseHistory = emptyList<Stretch>()
     private val closedSinceStart = mutableListOf<Stretch>()
-    private var predictor: EtaPredictorApi = predictorFactory(emptyList())
+    @Volatile private var predictor: EtaPredictorApi = predictorFactory(emptyList())
+    private var requestedVersion = 0L
+    private var installedVersion = 0L
     private var pendingPrediction: Pair<Long, Eta>? = null
     private var lastAdvisoryMs: Long? = null
 
@@ -70,12 +75,15 @@ internal class EtaMonitor(
         }
     }
 
-    @Synchronized
     internal fun onHistoryLoaded(loaded: List<Stretch>) {
-        baseHistory = loaded
-        // A stretch closed before loading finished may already be in the log files that were just read.
-        closedSinceStart.removeAll(loaded.toSet())
-        rebuildPredictor()
+        val loadedSet = loaded.toSet()
+        synchronized(this) {
+            baseHistory = loaded
+            // A stretch closed before loading finished may already be in the log files that were just read.
+            closedSinceStart.removeAll(loadedSet)
+            requestedVersion++
+        }
+        rebuildExecutor.execute(::rebuildPredictor)
     }
 
     @Synchronized
@@ -85,12 +93,25 @@ internal class EtaMonitor(
         val p50 = (predicted as? Eta.Estimate)?.let { "${it.p50}s" } ?: "unknown"
         info("Reel Break: ETA stretch closed: predicted_p50=$p50 actual=${s.durationS}s")
         closedSinceStart += s
-        rebuildPredictor()
+        requestedVersion++
+        rebuildExecutor.execute(::rebuildPredictor)
     }
 
+    /** Builds from a snapshot without holding the lock; an older build never replaces a newer one. */
     private fun rebuildPredictor() {
-        val durations = (baseHistory + closedSinceStart).sortedBy { it.startTs }.map { it.durationS }
-        predictor = predictorFactory(durations)
+        val version: Long
+        val history: List<Stretch>
+        synchronized(this) {
+            version = requestedVersion
+            history = baseHistory + closedSinceStart
+        }
+        val built = predictorFactory(history.sortedBy { it.startTs }.map { it.durationS })
+        synchronized(this) {
+            if (version > installedVersion) {
+                installedVersion = version
+                predictor = built
+            }
+        }
     }
 
     private fun predictNow(nowMs: Long): Eta = tracker.features(nowMs, zone)?.let(::predict) ?: Eta.Unknown
@@ -103,7 +124,13 @@ internal class EtaMonitor(
 
         fun createDefault(): EtaMonitor {
             val log = logger<EtaMonitor>()
-            return EtaMonitor(FileLineSink.createDefault(), info = { log.info(it) }, debug = { log.debug(it) })
+            return EtaMonitor(
+                FileLineSink.createDefault(),
+                rebuildExecutor = AppExecutorUtil.getAppExecutorService(),
+                predictorFactory = { EtaPredictor(it) },  // CONDITIONAL baseline
+                info = { log.info(it) },
+                debug = { log.debug(it) },
+            )
         }
     }
 }

@@ -43,7 +43,7 @@ tasks.register<JavaExec>("smokeTestMedia") {
 
 tasks.register<JavaExec>("evaluateEta") {
     group = "verification"
-    description = "Evaluate ETA baselines from <logDir>/stretches.csv (chronological split; seed is accepted but unused)"
+    description = "Evaluate ETA baselines on session JSONL logs in -Peta.logDir, plus an optional seed file -Peta.seed"
     dependsOn(tasks.testClasses)
     classpath = tasks.named<Test>("test").get().classpath
     mainClass = "com.github.zakgrivell.invadetheburg.eta.EtaEvaluationMain"

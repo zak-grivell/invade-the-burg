@@ -68,26 +68,37 @@ internal object SessionHistory {
             .sortedBy { it.startTs }
     }
 
-    /** Stretches from every `*.jsonl` in [logDir] plus [seedFile], each parsed on its own. Missing paths are ignored. */
-    fun load(logDir: Path, seedFile: Path): List<Stretch> {
-        val files = buildList {
-            if (Files.isDirectory(logDir)) {
-                try {
-                    Files.newDirectoryStream(logDir, "*.jsonl").use { addAll(it.sorted()) }
-                } catch (e: IOException) {
-                    LOG.warn("Reel Break: could not list session logs in $logDir", e)
-                }
+    /**
+     * Stretches from every `*.jsonl` in [logDir], parsed together so a session spanning two dated files (UTC midnight)
+     * stays whole, plus [seedFile], parsed on its own because its ids (`seed-01`) are not UUIDs. Missing paths are ignored.
+     */
+    fun load(logDir: Path, seedFile: Path): List<Stretch> =
+        (loadLogs(logDir, exclude = seedFile) + loadSeed(seedFile)).sortedBy { it.startTs }
+
+    /** The `*.jsonl` files in [logDir] in name (= date) order, skipping [exclude] if it lives there. */
+    fun logFiles(logDir: Path, exclude: Path? = null): List<Path> {
+        if (!Files.isDirectory(logDir)) return emptyList()
+        val skip = exclude?.toAbsolutePath()?.normalize()
+        return try {
+            Files.newDirectoryStream(logDir, "*.jsonl").use { files ->
+                files.filter { it.toAbsolutePath().normalize() != skip }.sorted()
             }
-            if (Files.isRegularFile(seedFile)) add(seedFile)
+        } catch (e: IOException) {
+            LOG.warn("Reel Break: could not list session logs in $logDir", e)
+            emptyList()
         }
-        return files.flatMap { file ->
-            try {
-                parse(Files.readAllLines(file))
-            } catch (e: IOException) {
-                LOG.warn("Reel Break: could not read $file", e)
-                emptyList()
-            }
-        }.sortedBy { it.startTs }
+    }
+
+    fun loadLogs(logDir: Path, exclude: Path? = null): List<Stretch> = parse(logFiles(logDir, exclude).flatMap(::readLines))
+
+    fun loadSeed(seedFile: Path): List<Stretch> =
+        if (Files.isRegularFile(seedFile)) parse(readLines(seedFile)) else emptyList()
+
+    private fun readLines(file: Path): List<String> = try {
+        Files.readAllLines(file)
+    } catch (e: IOException) {
+        LOG.warn("Reel Break: could not read $file", e)
+        emptyList()
     }
 
     fun defaultLogDir(): Path = FileLineSink.defaultDir()

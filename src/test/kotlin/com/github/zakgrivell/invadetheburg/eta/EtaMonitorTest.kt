@@ -137,4 +137,36 @@ class EtaMonitorTest {
         assertEquals("Reel Break: ETA history loaded: 0 stretches", infos[1])
         assertTrue(Files.notExists(none))
     }
+
+    @Test fun `predictor rebuild runs on the executor, not inside observe, and stale builds never win`() {
+        val queue = ArrayDeque<Runnable>()
+        val m = EtaMonitor(
+            sink = { lines += it },
+            rebuildExecutor = { queue.addLast(it) },
+            predictorFactory = fixedBySize(),
+            zone = ZoneOffset.UTC,
+            info = { infos += it },
+            debug = { debugs += it },
+        )
+        fun stretchAt(offsetS: Long) {
+            val t = t0 + offsetS * 1_000
+            m.observe(pane("READY"), t)
+            m.observe(pane("PROCESSING"), t + 1_000)
+            m.observe(pane("READY"), t + 11_000)
+        }
+
+        stretchAt(0)
+        stretchAt(100)
+        assertEquals(2, queue.size)           // nothing was built inside observe()
+        val first = queue.removeFirst()
+        val second = queue.removeFirst()
+        second.run()                          // newest snapshot (2 stretches) installs first...
+        first.run()                           // ...and the older one (also built from 2 here) must not regress it
+        stretchAt(200)
+        assertEquals("Reel Break: ETA stretch closed: predicted_p50=2.0s actual=10.0s", infos.last())
+    }
+
+    private fun fixedBySize() = { h: List<Double> ->
+        object : EtaPredictorApi { override fun predict(f: EtaFeatures) = Eta.Estimate(0.0, h.size.toDouble(), 0.0) }
+    }
 }

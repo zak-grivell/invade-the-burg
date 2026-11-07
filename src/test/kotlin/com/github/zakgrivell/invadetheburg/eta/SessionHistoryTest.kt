@@ -71,13 +71,35 @@ class SessionHistoryTest {
         assertEquals(fixtureStretches, result.drop(10))
     }
 
-    @Test fun `same session ids in different files do not mix`() {
+    @Test fun `a stretch split across two dated files at UTC midnight is kept`() {
         val logs = tmp.newFolder("sessions").toPath()
-        val a = """{"type":"transition","session_id":"dup","ts":"2026-11-07T10:00:00Z","from_state":"DONE","to_state":"WORKING"}"""
-        val b = """{"type":"transition","session_id":"dup","ts":"2026-11-07T10:00:09Z","from_state":"WORKING","to_state":"DONE"}"""
-        Files.writeString(logs.resolve("1.jsonl"), a + "\n")
-        Files.writeString(logs.resolve("2.jsonl"), b + "\n")
-        assertEquals(emptyList<Stretch>(), SessionHistory.load(logs, tmp.root.toPath().resolve("none.jsonl")))
+        val start = """{"type":"transition","session_id":"uuid-1","ts":"2026-11-07T23:59:50Z","from_state":"DONE","to_state":"WORKING"}"""
+        val end = """{"type":"transition","session_id":"uuid-1","ts":"2026-11-08T00:00:20Z","from_state":"WORKING","to_state":"DONE"}"""
+        Files.writeString(logs.resolve("2026-11-07.jsonl"), start + "\n")
+        Files.writeString(logs.resolve("2026-11-08.jsonl"), end + "\n")
+        val none = tmp.root.toPath().resolve("none.jsonl")
+        assertEquals(listOf(stretch("2026-11-07T23:59:50Z", 30.0)), SessionHistory.load(logs, none))
+    }
+
+    @Test fun `seed sessions are parsed separately from logs`() {
+        val logs = tmp.newFolder("sessions").toPath()
+        val start = """{"type":"transition","session_id":"seed-01","ts":"2026-11-07T10:00:00Z","from_state":"DONE","to_state":"WORKING"}"""
+        val end = """{"type":"transition","session_id":"seed-01","ts":"2026-11-07T10:00:09Z","from_state":"WORKING","to_state":"DONE"}"""
+        Files.writeString(logs.resolve("2026-11-07.jsonl"), start + "\n")
+        val seed = tmp.newFile("seed.jsonl").toPath()
+        Files.writeString(seed, end + "\n")
+        assertEquals(emptyList<Stretch>(), SessionHistory.load(logs, seed))
+    }
+
+    @Test fun `a seed file inside the log directory is not also read as a log`() {
+        val dir = tmp.newFolder("both").toPath()
+        Files.copy(resource("history.jsonl"), dir.resolve("history.jsonl"))
+        val seed = dir.resolve("seed-history.example.jsonl")
+        Files.copy(resource("seed-history.example.jsonl"), seed)
+        assertEquals(listOf(dir.resolve("history.jsonl")), SessionHistory.logFiles(dir, exclude = seed))
+        assertEquals(3, SessionHistory.loadLogs(dir, exclude = seed).size)
+        assertEquals(10, SessionHistory.loadSeed(seed).size)
+        assertEquals(13, SessionHistory.load(dir, seed).size)
     }
 
     @Test fun `missing log directory and seed file are ignored`() {
