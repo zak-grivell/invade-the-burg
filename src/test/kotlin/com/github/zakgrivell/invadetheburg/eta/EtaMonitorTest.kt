@@ -294,7 +294,7 @@ class EtaMonitorTest {
         assertEquals(EtaAction.SKIP_BREAK, m.evaluate(t0 + 15_000, false).action)
         val view = m.evaluate(t0 + 21_000, false)                                   // elapsed 20 s
         assertEquals(EtaAction.SHOW_AS_TODAY, view.action)
-        assertNull(view.badge)
+        assertEquals("Longer than usual", view.badge)
         assertEquals(listOf("Reel Break: ETA reopened break after 20s (stretch longer than usual)"), reopened())
     }
 
@@ -326,5 +326,79 @@ class EtaMonitorTest {
         assertEquals(after, calls)
         m.evaluate(t0 + 3_000, false)
         assertEquals(after + 1, calls)
+    }
+
+    // ---- Badge logging and "Longer than usual" ----
+
+    private fun badgeLogs() = infos.filter { it.startsWith("Reel Break: ETA badge:") }
+
+    @Test fun `badge changes are logged once each, including why it is hidden`() {
+        var eta: Eta = Eta.Unknown
+        val m = monitorWith { eta }
+        m.evaluate(t0, false)                                    // not working
+        m.startStretch()
+        m.evaluate(t0 + 1_000, false)
+        m.evaluate(t0 + 3_000, false)                            // unchanged: no new line
+        eta = Eta.Estimate(100.0, 100.0, 200.0)
+        m.evaluate(t0 + 5_000, false)
+        m.evaluate(t0 + 7_000, false)                            // unchanged
+        assertEquals(
+            listOf(
+                "Reel Break: ETA badge: hidden: not in a working stretch",
+                "Reel Break: ETA badge: hidden: Unknown",
+                "Reel Break: ETA badge: \"~2 min left\"",
+            ),
+            badgeLogs(),
+        )
+    }
+
+    @Test fun `a skipped break and an untrusted stretch explain themselves in the log`() {
+        val skipped = monitorWith { Eta.Estimate(10.0, 15.0, 30.0) }
+        skipped.startStretch()
+        skipped.evaluate(t0 + 1_000, false)
+        assertEquals("Reel Break: ETA badge: hidden: break skipped", badgeLogs().last())
+
+        infos.clear()
+        val untrusted = monitorWith { Eta.Estimate(10.0, 15.0, 30.0) }
+        untrusted.observe(pane("PROCESSING"), t0)
+        untrusted.evaluate(t0, true)
+        assertEquals(listOf("Reel Break: ETA badge: hidden: stretch start not observed"), badgeLogs())
+    }
+
+    @Test fun `each new stretch logs its first badge again`() {
+        val m = monitorWith { Eta.Unknown }
+        m.startStretch()
+        m.evaluate(t0 + 1_000, false)
+        m.observe(pane("READY"), t0 + 5_000)
+        m.observe(pane("PROCESSING"), t0 + 6_000)
+        m.evaluate(t0 + 6_000, false)
+        assertEquals(2, badgeLogs().count { it == "Reel Break: ETA badge: hidden: Unknown" })
+    }
+
+    @Test fun `longer than usual is shown after an unknown reopen until an estimate returns`() {
+        var eta: Eta = Eta.Estimate(10.0, 15.0, 30.0)
+        val m = monitorWith { eta }
+        m.startStretch()
+        assertEquals(EtaAction.SKIP_BREAK, m.evaluate(t0 + 1_000, false).action)
+        eta = Eta.Unknown
+        assertEquals("Longer than usual", m.evaluate(t0 + 3_000, false).badge)
+        assertEquals("Longer than usual", m.evaluate(t0 + 9_000, true).badge)
+        assertEquals("Reel Break: ETA badge: \"Longer than usual\"", badgeLogs().last())
+        eta = Eta.Estimate(100.0, 100.0, 200.0)
+        assertEquals("~2 min left", m.evaluate(t0 + 11_000, true).badge)
+    }
+
+    @Test fun `no longer than usual label when the reopen came from a rising estimate or no skip happened`() {
+        var eta: Eta = Eta.Estimate(10.0, 15.0, 30.0)
+        val rising = monitorWith { eta }
+        rising.startStretch()
+        eta = Eta.Estimate(100.0, 100.0, 200.0)
+        assertEquals("~2 min left", rising.evaluate(t0 + 3_000, false).badge)
+        eta = Eta.Unknown
+        assertNull(rising.evaluate(t0 + 5_000, true).badge)
+
+        val plain = monitorWith { Eta.Unknown }
+        plain.startStretch()
+        assertNull(plain.evaluate(t0 + 3_000, false).badge)
     }
 }

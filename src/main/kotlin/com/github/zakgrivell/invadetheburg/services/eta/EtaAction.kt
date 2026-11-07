@@ -18,6 +18,9 @@ internal fun etaAction(decision: EtaDecision, breakShowing: Boolean, eta: Eta): 
     else -> EtaAction.SHOW_AS_TODAY
 }
 
+/** Shown instead of a hidden badge when a skipped break was reopened because no past stretch lasted this long. */
+internal const val LONGER_THAN_USUAL_BADGE = "Longer than usual"
+
 /** Badge text from the p50 estimate; null (badge hidden) when there is no estimate. */
 internal fun etaBadgeText(eta: Eta, action: EtaAction): String? {
     if (eta !is Eta.Estimate) return null

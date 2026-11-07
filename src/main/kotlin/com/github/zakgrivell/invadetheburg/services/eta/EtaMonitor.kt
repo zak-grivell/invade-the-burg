@@ -39,6 +39,8 @@ internal class EtaMonitor(
     // first observed would otherwise look like elapsed = 0 and be wrongly skipped or hinted.
     private var reliableStretch = false
     private var skipStretch = false
+    private var longerThanUsual = false
+    private var lastBadgeLabel: String? = null
     private var cachedView: CachedView? = null
 
     private class CachedView(val atMs: Long, val breakShowing: Boolean, val view: EtaView)
@@ -52,6 +54,8 @@ internal class EtaMonitor(
                     pendingPrediction = t.tsMs to eta
                     reliableStretch = t.from in CLEAN_STRETCH_STARTS
                     skipStretch = reliableStretch && etaAction(decide(eta), breakShowing = false, eta = eta) == EtaAction.SKIP_BREAK
+                    longerThanUsual = false
+                    lastBadgeLabel = null
                     cachedView = null
                 }
             }
@@ -80,8 +84,8 @@ internal class EtaMonitor(
      */
     @Synchronized
     fun evaluate(nowMs: Long, breakShowing: Boolean): EtaView {
-        val features = tracker.features(nowMs, zone) ?: return EtaView.NONE
-        if (!reliableStretch) return EtaView(EtaAction.SHOW_AS_TODAY, null)
+        val features = tracker.features(nowMs, zone) ?: return noted(EtaView.NONE, "not in a working stretch")
+        if (!reliableStretch) return noted(EtaView(EtaAction.SHOW_AS_TODAY, null), "stretch start not observed")
         cachedView?.takeIf { nowMs - it.atMs < VIEW_INTERVAL_MS && it.breakShowing == breakShowing }?.let { return it.view }
         val eta = predict(features)
         val view = if (skipStretch && etaAction(decide(eta), breakShowing = false, eta = eta) == EtaAction.SKIP_BREAK) {
@@ -89,13 +93,26 @@ internal class EtaMonitor(
         } else {
             if (skipStretch) {
                 skipStretch = false
+                // Reopened because nothing in the history lasted this long: say so rather than showing no badge.
+                longerThanUsual = eta !is Eta.Estimate
                 info("Reel Break: ETA reopened break after ${Math.round(features.stretchElapsedS)}s (stretch longer than usual)")
             }
             // A skip is only ever decided from the start of a stretch; later it would also block a break the user asked for.
             val action = etaAction(decide(eta), breakShowing, eta).let { if (it == EtaAction.SKIP_BREAK) EtaAction.SHOW_AS_TODAY else it }
-            EtaView(action, etaBadgeText(eta, action))
+            val badge = etaBadgeText(eta, action) ?: LONGER_THAN_USUAL_BADGE.takeIf { longerThanUsual && eta !is Eta.Estimate }
+            EtaView(action, badge)
         }
         cachedView = CachedView(nowMs, breakShowing, view)
+        return noted(view, if (view.action == EtaAction.SKIP_BREAK) "break skipped" else if (eta !is Eta.Estimate) "Unknown" else "no badge")
+    }
+
+    /** Logs the badge whenever it changes, so a missing badge can be explained from idea.log. */
+    private fun noted(view: EtaView, hiddenReason: String): EtaView {
+        val label = view.badge?.let { "\"$it\"" } ?: "hidden: $hiddenReason"
+        if (label != lastBadgeLabel) {
+            lastBadgeLabel = label
+            info("Reel Break: ETA badge: $label")
+        }
         return view
     }
 
