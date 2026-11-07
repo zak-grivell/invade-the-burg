@@ -1,9 +1,17 @@
 .DS_Store
 .gradle
-.idea
+.idea/*
+!.idea/runConfigurations/
+!.idea/runConfigurations/**
 .intellijPlatform
 .kotlin
 build
 
 __pycache__/
 *.py[cod]
+
+out/
+node_modules/
+.env
+*.log
+.claude/settings.local.json

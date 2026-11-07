@@ -1,5 +1,27 @@
 # invade-the-burg
 
+## What it is
+
+Reel Break is a JetBrains plugin that opens a configurable distraction over an active Air agent pane while the agent works and returns the developer when attention is needed. The product direction includes an ACP proxy for working / needs-permission / done signals and time-saved stats; diff → reel is a stretch goal. Those planned capabilities are not all implemented in this checkout.
+
+## How to run
+
+With JDK 25 and a graphical desktop, run `./gradlew runIde --console=plain` from the repository root. The project targets IntelliJ 2026.3. Linux browser playback requires WebKitGTK and GStreamer codecs; see `BrowserPlatform.kt` and the native-media workflow for platform prerequisites. This command has not been locally verified in the cloud environment because required downloads are blocked.
+
+## How to test
+
+Use Node 24.22.1 (`.node-version`). Run `npm ci`, then `node tests/media-visibility.test.cjs` (13 scenarios verified locally). No third-party npm packages are required.
+
+Build and run Kotlin tests with `./gradlew build test --console=plain --no-daemon`. GitHub CI validates this command; local Gradle verification was waived due to blocked dependency downloads. The CI Kotlin job uses JDK 25 and Gradle caching. Cold IntelliJ downloads may exceed three minutes; the JS job has a three-minute limit. Native media smoke tests and full plugin compatibility verification remain separate workflows/checks.
+
+## Architecture
+
+Diagram placeholder: agent pane signals → break state → overlay / native browser → return to work. See [AGENTS.md](AGENTS.md) for the directory map, exact commands and shared engineering rules. ACP proxy and statistics components are planned.
+
+## AI usage
+
+All agents follow [AGENTS.md](AGENTS.md). Tools and task contributions are recorded in [AIcontribution.md](AIcontribution.md).
+
 Licensed under the [GNU General Public License v3.0](LICENSE) (SPDX: `GPL-3.0-only`).
 
 ![Build](https://github.com/zak-grivell/invade-the-burg/workflows/Build/badge.svg)
