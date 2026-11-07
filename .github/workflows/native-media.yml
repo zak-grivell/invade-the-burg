@@ -1,0 +1,61 @@
+name: Native browser compatibility
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-media:
+    name: Playback and persistence (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Install Linux browser runtime and media decoders
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libwebkit2gtk-4.1-0 gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad
+      - name: Install Windows WebView2 Evergreen Runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'MicrosoftEdgeWebview2Setup.exe'
+          Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $installer
+          $install = Start-Process $installer -ArgumentList '/silent', '/install' -Wait -PassThru
+          if ($install.ExitCode -notin @(0, 3010)) { throw "WebView2 setup failed: $($install.ExitCode)" }
+      - name: Download public H.264/AAC fixture
+        shell: bash
+        run: |
+          mkdir -p build/media-smoke
+          curl --fail --location --retry 3 https://media.w3.org/2010/05/sintel/trailer.mp4 -o build/media-smoke/h264-aac.mp4
+      - name: Linux tests, package, and native playback
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          GDK_BACKEND: x11
+        run: xvfb-run -a ./gradlew test buildPlugin verifyPluginStructure smokeTestMedia --console=plain
+      - name: macOS and Windows tests, package, and native playback
+        if: runner.os != 'Linux'
+        shell: bash
+        run: ./gradlew test buildPlugin verifyPluginStructure smokeTestMedia --console=plain
+      - name: Save verification reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-browser-reports-${{ matrix.os }}
+          path: build/reports/
