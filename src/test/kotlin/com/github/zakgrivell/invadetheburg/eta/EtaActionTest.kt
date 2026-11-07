@@ -9,6 +9,10 @@ import com.github.zakgrivell.invadetheburg.services.eta.etaBadgeText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import com.github.zakgrivell.invadetheburg.services.eta.EtaFeatures
+import com.github.zakgrivell.invadetheburg.services.eta.EtaPredictor
+import com.github.zakgrivell.invadetheburg.services.eta.SessionHistory
+import java.nio.file.Path
 
 class EtaActionTest {
     private fun estimate(p20: Double, p50: Double = p20 + 10) = Eta.Estimate(p20, p50, p50 + 10)
@@ -54,6 +58,25 @@ class EtaActionTest {
         assertNull(etaBadgeText(Eta.Unknown, EtaAction.SHOW_AS_TODAY))
         assertNull(etaBadgeText(Eta.Unknown, EtaAction.NONE))
         assertEquals("Wrapping up…", etaBadgeText(estimate(10.0, 20.0), EtaAction.WRAPPING_UP_HINT))
+    }
+
+    private fun demoEta(seed: String, elapsedS: Double): Eta {
+        val stretches = SessionHistory.loadSeed(Path.of(javaClass.getResource("/eta/$seed")!!.toURI()))
+        return EtaPredictor(stretches.map { it.durationS }).predict(EtaFeatures(elapsedS, elapsedS, 0, elapsedS, 12))
+    }
+
+    @Test fun `demo-short seed skips a new stretch and the example seed does not`() {
+        val short = demoEta("seed-history.demo-short.jsonl", 0.0)
+        assertEquals(EtaAction.SKIP_BREAK, action(short, breakShowing(false)))
+        assertEquals(EtaAction.SHOW_AS_TODAY, action(demoEta("seed-history.example.jsonl", 0.0), breakShowing(false)))
+    }
+
+    @Test fun `demo-short seed has fifteen stretches of 20 to 90 seconds`() {
+        val path = Path.of(javaClass.getResource("/eta/seed-history.demo-short.jsonl")!!.toURI())
+        val durations = SessionHistory.loadSeed(path).map { it.durationS }
+        assertEquals(15, durations.size)
+        assertEquals(20.0, durations.min(), 0.0)
+        assertEquals(90.0, durations.max(), 0.0)
     }
 
     private fun breakShowing(value: Boolean) = value

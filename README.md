@@ -73,3 +73,7 @@ Plugin based on the [IntelliJ Platform Plugin Template][template].
 Reel Break 1.2.3 leaves Reel selection, scrolling, and playback timing to Instagram's player. It no longer pauses videos based on their relative size or starts videos in response to scroll/readiness timers. A rejected Instagram `play()` request gets one muted inline fallback only for `NotAllowedError`; website cancellations retain their original promise behavior. Explicit site/user pauses cancel retained resumes. Hidden pages retain their document and pause media; showing the page resumes previously playing media only when the source is unchanged and still visible. A slow play request is never aborted by a plugin watchdog.
 
 Validation: `node tests/media-visibility.test.cjs`; the `smokeTestMedia` Gradle task exercises native H.264 playback, 12 consecutive site-owned scroll-snap handoffs, manual pause, and repeated hide/show cycles. Native Windows/Linux execution still requires their respective runners.
+
+## Agent ETA
+
+Reel Break logs agent sessions locally and, when "Use ETA to time breaks" is on, uses past stretches to show time left and skip breaks for very short stretches. `src/test/resources/eta/seed-history.example.jsonl` and `seed-history.demo-short.jsonl` are synthetic demo data for trying the badge and skip behaviour, so any ETA evaluation (`./gradlew evaluateEta`) must use real session logs, not these files.
