@@ -6,7 +6,10 @@ import com.intellij.openapi.components.service
 import com.github.zakgrivell.invadetheburg.settings.ReelSettings
 import com.github.zakgrivell.invadetheburg.settings.FavoriteWebsite
 import java.awt.BorderLayout
+import java.awt.Color
+import java.awt.Font
 import java.awt.Rectangle
+import java.util.Properties
 import javax.swing.JButton
 import javax.swing.JComboBox
 import javax.swing.DefaultComboBoxModel
@@ -18,15 +21,36 @@ import javax.swing.SwingUtilities
 
 /** Hides the overlay in place so native browser peers keep their document and history. */
 internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: () -> Unit, private val settings: () -> Unit) : Disposable {
+    companion object {
+        private val version: String = try {
+            val props = Properties()
+            ReelOverlay::class.java.classLoader.getResourceAsStream("reelbreak.properties")?.use { props.load(it) }
+            props.getProperty("version", "unknown")
+        } catch (_: Throwable) {
+            "unknown"
+        }
+    }
+
     private var layer: JLayeredPane? = null
     private var returnLayer: JLayeredPane? = null
+    private var popupLayer: JLayeredPane? = null
     private val returnButton = JButton("Back to Reels").apply {
         toolTipText = "Return to your break while the agent is working"
         addActionListener { resume() }
     }
+    private val popupPanel = JPanel(BorderLayout()).apply {
+        background = Color(0, 0, 0, 180)
+        isOpaque = true
+        add(JBLabel("Enjoy your break!").apply {
+            foreground = Color.WHITE
+            font = font.deriveFont(Font.BOLD, 24f)
+            border = javax.swing.BorderFactory.createEmptyBorder(20, 40, 20, 40)
+        }, BorderLayout.CENTER)
+    }
     private var view: JPanel? = null
     private var updatingSwitcher = false
     private var switcherItems: List<FavoriteWebsite> = emptyList()
+    private var popupShown = false
     private val websiteSwitcher = JComboBox<FavoriteWebsite>().apply {
         toolTipText = "Switch website — manage favourites in Settings"
         addActionListener {
@@ -83,7 +107,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         if (view == null) {
             view = JPanel(BorderLayout()).apply {
                 add(JPanel(BorderLayout()).apply {
-                    add(JBLabel("  Reel Break · hides when your agent finishes"), BorderLayout.CENTER)
+                    add(JBLabel("  Reel Break · v$version"), BorderLayout.CENTER)
                     add(JPanel().apply {
                         add(websiteSwitcher)
                         add(JButton("Settings").apply { addActionListener { settings() } })
@@ -105,7 +129,32 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
             view!!.repaint()
         }
         view!!.isVisible = true
+        if (!popupShown) {
+            popupShown = true
+            showPopup(nextLayer, visible)
+        }
         return true
+    }
+
+    private fun showPopup(layer: JLayeredPane, bounds: Rectangle) {
+        if (popupLayer !== layer) {
+            popupLayer?.remove(popupPanel)
+            popupLayer?.repaint()
+            popupLayer = layer
+            layer.add(popupPanel, JLayeredPane.POPUP_LAYER)
+        }
+        popupPanel.doLayout()
+        val pref = popupPanel.preferredSize
+        val x = bounds.x + (bounds.width - pref.width) / 2
+        val y = bounds.y + (bounds.height - pref.height) / 2
+        popupPanel.setBounds(x.coerceAtLeast(bounds.x), y.coerceAtLeast(bounds.y), pref.width, pref.height)
+        popupPanel.isVisible = true
+        layer.revalidate()
+        layer.repaint()
+    }
+
+    private fun hidePopup() {
+        popupPanel.isVisible = false
     }
 
     fun showReturnButton(editor: JComponent) {
@@ -135,6 +184,8 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
 
     fun hide() {
         hideReturnButton()
+        hidePopup()
+        popupShown = false
         page.hide()
         if (view?.isVisible != true) return
         view?.isVisible = false
@@ -148,6 +199,9 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         returnLayer?.remove(returnButton)
         returnLayer?.repaint()
         returnLayer = null
+        popupLayer?.remove(popupPanel)
+        popupLayer?.repaint()
+        popupLayer = null
         view?.let { layer?.remove(it) }
         layer?.revalidate()
         layer?.repaint()
