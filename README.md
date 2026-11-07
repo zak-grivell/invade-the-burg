@@ -1,5 +1,7 @@
 # invade-the-burg
 
+Licensed under the [GNU General Public License v3.0](LICENSE) (SPDX: `GPL-3.0-only`).
+
 ![Build](https://github.com/zak-grivell/invade-the-burg/workflows/Build/badge.svg)
 [![Version](https://img.shields.io/jetbrains/plugin/v/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
 [![Downloads](https://img.shields.io/jetbrains/plugin/d/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
