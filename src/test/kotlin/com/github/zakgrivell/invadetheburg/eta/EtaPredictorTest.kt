@@ -43,6 +43,27 @@ class EtaPredictorTest {
         assertEquals(Eta.Unknown, EtaPredictor(emptyList()).predict(features(0.0)))
     }
 
+    @Test fun `unsorted history gives the same estimates as sorted history`() {
+        val elapsed = features(50.0)
+        for (baseline in Baseline.entries) {
+            val sorted = EtaPredictor(history, baseline).predict(elapsed) as Eta.Estimate
+            assertEstimate(sorted, EtaPredictor(history.reversed(), baseline).predict(elapsed))
+        }
+    }
+
+    @Test fun `stretch ending exactly at elapsed counts as a survivor`() {
+        val predictor = EtaPredictor(listOf(10.0, 20.0, 30.0, 40.0, 50.0), minSamples = 3)
+        assertEstimate(Eta.Estimate(4.0, 10.0, 16.0), predictor.predict(features(30.0)))
+    }
+
+    @Test fun `minimum sample count is configurable`() {
+        assertEquals(Eta.Unknown, EtaPredictor(history, minSamples = 3).predict(features(200.0)))
+        assertEstimate(
+            Eta.Estimate(160.0, 250.0, 340.0),
+            EtaPredictor(history, minSamples = 2).predict(features(200.0)),
+        )
+    }
+
     @Test fun `percentile helper interpolates unsorted values and handles endpoints`() {
         val values = listOf(30.0, 10.0, 20.0, 40.0)
         assertEquals(10.0, percentileType7(values, 0.0), 0.0)
