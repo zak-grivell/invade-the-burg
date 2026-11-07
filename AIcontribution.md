@@ -11,3 +11,5 @@
 | time (UTC) | who | agent/tool | task | what the human changed or rejected |
 | --- | --- | --- | --- | --- |
 | 2026-11-07 | Repository owner + Codex | Codex/GPT | Add agent guidance, contribution log, CI, local configuration safeguards, environment example and development documentation; verify JS playback tests. | Human waived local Gradle/Kotlin verification after blocked downloads and requested GitHub CI validation; no implementation review outcome recorded. |
+| 2026-11-07 | Lane A (Claude) | Claude Code (Opus 5.5) | Agent ETA T0: temporary `Air activity seen` info log in `AirPaneActivity` to confirm Air activity enum names. | Pending human review. |
+| 2026-11-07 | Lane A (Claude) | Claude Code (Opus 5.5) | Agent ETA T1: `PaneActivity.activity`, `AgentState` model/mapping, and shared `EtaTypes.kt` contract for Lane B; stricter `PaneActivityTest`, new `AgentStateTest`. | Pending human review. |
