@@ -1,0 +1,22 @@
+{"type":"transition","session_id":"a","ts":"2026-11-07T12:00:00Z","from_state":"DONE","to_state":"WORKING"}
+{"type":"transition","session_id":"a","ts":"2026-11-07T12:00:10Z","from_state":"WORKING","to_state":"NEEDS_PERMISSION"}
+not json at all
+
+{"type":"transition","session_id":"a","ts":"2026-11-07T12:00:30Z","from_state":"NEEDS_PERMISSION","to_state":"WORKING"}
+{"type":"transition","session_id":"a","ts":"2026-11-07T12:01:00Z","from_state":"WORKING","to_state":"DONE"}
+{"type":"session_end","session_id":"a","ts":"2026-11-07T12:01:00Z","outcome":"done","total_duration_s":60.0}
+{"type":"transition","session_id":"b","ts":"2026-11-07T12:10:00Z","from_state":"UNOBSERVED","to_state":"WORKING"}
+{"type":"transition","session_id":"b","ts":"2026-11-07T12:10:20Z","from_state":"WORKING","to_state":"IDLE"}
+{"type":"session_end","session_id":"b","ts":"2026-11-07T12:10:20Z","outcome":"partial","total_duration_s":20.0}
+{"type":"transition","session_id":"c","ts":"2026-11-07T12:20:00Z","from_state":"IDLE","to_state":"WORKING"}
+{"type":"transition","session_id":"c","ts":"2026-11-07T12:20:05Z","from_state":"WORKING","to_state":"UNOBSERVED"}
+{"type":"session_end","session_id":"c","ts":"2026-11-07T12:20:05Z","outcome":"abandoned","total_duration_s":5.0}
+{"type":"transition","session_id":"d","ts":"2026-11-07T12:30:00Z","from_state":"DONE","to_state":"WORKING"}
+{"type":"transition","session_id":"d","ts":"2026-11-07T12:30:15Z","from_state":"WORKING","to_state":"UNKNOWN"}
+{"type":"transition","session_id":"d","ts":"2026-11-07T12:30:20Z","from_state":"UNKNOWN","to_state":"WORKING"}
+{"type":"transition","session_id":"d","ts":"2026-11-07T12:30:50Z","from_state":"WORKING","to_state":"DONE"}
+{"type":"transition","session_id":"e","ts":"2026-11-07T12:40:45Z","from_state":"WORKING","to_state":"DONE"}
+{"type":"transition","session_id":"e","ts":"2026-11-07T12:40:00Z","from_state":"DONE","to_state":"WORKING"}
+{"type":"transition","session_id":"f","ts":"2026-11-07T12:50:00Z","from_state":"DONE","to_state":"BOGUS"}
+{"type":"transition","session_id":"f","ts":"yesterday","from_state":"DONE","to_state":"WORKING"}
+{"type":"transition","session_id":"g","ts":"2026-11-07T12:55:00Z","from_state":"DONE","to_state":"WORKING"

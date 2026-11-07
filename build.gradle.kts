@@ -40,3 +40,13 @@ tasks.register<JavaExec>("smokeTestMedia") {
     systemProperty("java.awt.headless", "false")
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
+
+tasks.register<JavaExec>("evaluateEta") {
+    group = "verification"
+    description = "Evaluate ETA baselines on session JSONL logs in -Peta.logDir, plus an optional seed file -Peta.seed"
+    dependsOn(tasks.testClasses)
+    classpath = tasks.named<Test>("test").get().classpath
+    mainClass = "com.github.zakgrivell.invadetheburg.eta.EtaEvaluationMain"
+    args(providers.gradleProperty("eta.logDir").orElse("src/test/resources/eta").get())
+    providers.gradleProperty("eta.seed").orNull?.let { args(it) }
+}

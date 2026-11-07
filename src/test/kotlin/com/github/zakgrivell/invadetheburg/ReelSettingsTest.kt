@@ -66,4 +66,19 @@ class ReelSettingsTest {
         settings.loadState(ReelSettings.Options().apply { url = "invalid" })
         assertEquals(DEFAULT_BREAK_URL, settings.url)
     }
+    @Test fun `ETA break timing defaults on, persists, and old state without the field stays on`() {
+        val settings = ReelSettings()
+        assertTrue(settings.useEtaToTimeBreaks)
+        settings.useEtaToTimeBreaks = false
+        val restored = ReelSettings()
+        restored.loadState(settings.state)
+        assertFalse(restored.useEtaToTimeBreaks)
+        restored.useEtaToTimeBreaks = true
+        val again = ReelSettings()
+        again.loadState(restored.state)
+        assertTrue(again.useEtaToTimeBreaks)
+        val old = ReelSettings()
+        old.loadState(ReelSettings.Options())
+        assertTrue(old.useEtaToTimeBreaks)
+    }
 }

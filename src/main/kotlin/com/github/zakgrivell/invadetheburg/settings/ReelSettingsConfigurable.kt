@@ -9,6 +9,8 @@ import com.github.zakgrivell.invadetheburg.ui.MultiAgentPreviewDialog
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
 import java.awt.BorderLayout
+import javax.swing.BoxLayout
+import javax.swing.JCheckBox
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.JButton
@@ -18,6 +20,7 @@ import javax.swing.table.DefaultTableModel
 
 class ReelSettingsConfigurable : SearchableConfigurable {
     private var urlField: JBTextField? = null
+    private var etaCheckBox: JCheckBox? = null
     private var favoritesTable: JTable? = null
     private var favoritesModel: DefaultTableModel? = null
     override fun getId() = "dev.reelbreak.settings"
@@ -25,7 +28,13 @@ class ReelSettingsConfigurable : SearchableConfigurable {
     override fun createComponent(): JComponent = JPanel(BorderLayout(0, 12)).apply {
         val input = JBTextField(service<ReelSettings>().url)
         urlField = input
-        add(JPanel(BorderLayout(8, 0)).apply {
+        val etaBox = JCheckBox("Use ETA to time breaks", service<ReelSettings>().useEtaToTimeBreaks).apply {
+            toolTipText = "Skip breaks for stretches predicted to end within seconds, show time left, and warn when the agent is wrapping up"
+        }
+        etaCheckBox = etaBox
+        add(JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            add(JPanel(BorderLayout(8, 0)).apply {
             add(JBLabel("URL:"), BorderLayout.WEST)
             add(input, BorderLayout.CENTER)
             add(JButton("Setup").apply {
@@ -39,6 +48,8 @@ class ReelSettingsConfigurable : SearchableConfigurable {
                     ReelSetupDialog(input, url).show()
                 }
             }, BorderLayout.EAST)
+            })
+            add(JPanel(BorderLayout()).apply { add(etaBox, BorderLayout.WEST) })
         }, BorderLayout.NORTH)
         val model = object : DefaultTableModel(arrayOf("Name", "Website URL"), 0) {
             override fun getColumnClass(columnIndex: Int): Class<*> = String::class.java
@@ -96,12 +107,13 @@ class ReelSettingsConfigurable : SearchableConfigurable {
     override fun isModified(): Boolean {
         if (urlField == null) return false
         val settings = service<ReelSettings>()
-        return urlField?.text?.trim() != settings.url || readFavorites() != settings.favorites || favoritesTable?.isEditing == true
+        return urlField?.text?.trim() != settings.url || etaCheckBox?.isSelected != settings.useEtaToTimeBreaks || readFavorites() != settings.favorites || favoritesTable?.isEditing == true
     }
     override fun reset() {
         favoritesTable?.cellEditor?.cancelCellEditing()
         val settings = service<ReelSettings>()
         urlField?.text = settings.url
+        etaCheckBox?.isSelected = settings.useEtaToTimeBreaks
         favoritesModel?.let { model ->
             model.rowCount = 0
             settings.favorites.forEach { model.addRow(arrayOf(it.name, it.url)) }
@@ -113,9 +125,12 @@ class ReelSettingsConfigurable : SearchableConfigurable {
         try {
             val url = normalizeBreakUrl(value)
             val favorites = normalizeFavorites(readFavorites())
-            service<ReelSettings>().let { it.url = url; it.favorites = favorites }
+            service<ReelSettings>().let {
+                it.url = url; it.favorites = favorites
+                etaCheckBox?.let { box -> it.useEtaToTimeBreaks = box.isSelected }
+            }
         }
         catch (error: IllegalArgumentException) { throw ConfigurationException(error.message ?: "Invalid URL") }
     }
-    override fun disposeUIResources() { urlField = null; favoritesTable = null; favoritesModel = null }
+    override fun disposeUIResources() { urlField = null; etaCheckBox = null; favoritesTable = null; favoritesModel = null }
 }
