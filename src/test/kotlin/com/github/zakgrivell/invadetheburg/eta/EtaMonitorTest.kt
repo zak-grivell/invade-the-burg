@@ -262,4 +262,69 @@ class EtaMonitorTest {
         assertEquals(EtaAction.SHOW_AS_TODAY, view.action)
         assertNull(view.badge)
     }
+
+    // ---- Provisional skip ----
+
+    private fun reopened() = infos.filter { it.contains("reopened") }
+
+    @Test fun `a skipped stretch reopens the break when the conditional ETA rises`() {
+        var p20 = 10.0
+        val m = monitorWith { f -> Eta.Estimate(if (f.stretchElapsedS < 10) 10.0 else p20, 60.0, 90.0) }
+        p20 = 100.0
+        m.startStretch()                                   // stretch starts at t0 + 1 s
+        assertEquals(EtaAction.SKIP_BREAK, m.evaluate(t0 + 1_000, false).action)
+        assertEquals(EtaAction.SKIP_BREAK, m.evaluate(t0 + 6_000, false).action)   // elapsed 5 s
+        assertTrue(reopened().isEmpty())
+
+        val view = m.evaluate(t0 + 11_000, breakShowing = false)                    // elapsed 10 s
+        assertEquals(EtaAction.SHOW_AS_TODAY, view.action)
+        assertEquals("~1 min left", view.badge)
+        assertEquals(listOf("Reel Break: ETA reopened break after 10s (stretch longer than usual)"), reopened())
+
+        p20 = 5.0   // a reopened break is never skipped again, and the log line is not repeated
+        assertEquals(EtaAction.SHOW_AS_TODAY, m.evaluate(t0 + 13_000, breakShowing = false).action)
+        assertEquals(EtaAction.WRAPPING_UP_HINT, m.evaluate(t0 + 15_000, breakShowing = true).action)
+        assertEquals(1, reopened().size)
+    }
+
+    @Test fun `a skipped stretch reopens when the estimate becomes unknown`() {
+        val m = monitorWith { f -> if (f.stretchElapsedS < 20) Eta.Estimate(10.0, 15.0, 30.0) else Eta.Unknown }
+        m.startStretch()
+        assertEquals(EtaAction.SKIP_BREAK, m.evaluate(t0 + 1_000, false).action)
+        assertEquals(EtaAction.SKIP_BREAK, m.evaluate(t0 + 15_000, false).action)
+        val view = m.evaluate(t0 + 21_000, false)                                   // elapsed 20 s
+        assertEquals(EtaAction.SHOW_AS_TODAY, view.action)
+        assertNull(view.badge)
+        assertEquals(listOf("Reel Break: ETA reopened break after 20s (stretch longer than usual)"), reopened())
+    }
+
+    @Test fun `a short skipped stretch stays skipped until it ends`() {
+        val m = monitorWith { Eta.Estimate(10.0, 15.0, 30.0) }
+        m.startStretch()
+        (1..8).forEach { assertEquals(EtaAction.SKIP_BREAK, m.evaluate(t0 + 1_000L + it * 1_000L, false).action) }
+        m.observe(pane("READY"), t0 + 10_000)
+        assertEquals(EtaAction.NONE, m.evaluate(t0 + 10_000, false).action)
+        assertTrue(reopened().isEmpty())
+    }
+
+    @Test fun `forceBreak on a skipped stretch opens it without the late-reopen log`() {
+        val m = monitorWith { Eta.Estimate(10.0, 15.0, 30.0) }
+        m.startStretch()
+        m.forceBreak()
+        m.evaluate(t0 + 5_000, true)
+        assertTrue(reopened().isEmpty())
+    }
+
+    @Test fun `skipped stretches are re-evaluated at most once per second`() {
+        var calls = 0
+        val m = monitorWith { calls++; Eta.Estimate(10.0, 15.0, 30.0) }
+        m.startStretch()
+        m.evaluate(t0 + 2_000, false)
+        val after = calls
+        m.evaluate(t0 + 2_400, false)
+        m.evaluate(t0 + 2_900, false)
+        assertEquals(after, calls)
+        m.evaluate(t0 + 3_000, false)
+        assertEquals(after + 1, calls)
+    }
 }

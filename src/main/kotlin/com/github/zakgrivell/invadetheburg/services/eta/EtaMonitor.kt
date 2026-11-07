@@ -72,17 +72,26 @@ internal class EtaMonitor(
     }
 
     /**
-     * What the overlay should do right now. A skip is decided once, at the start of a trusted stretch; later in the
-     * stretch only a "wrapping up" hint can appear, and only while a break is showing. Cached for [VIEW_INTERVAL_MS].
+     * What the overlay should do right now. A skip is decided at the start of a trusted stretch but is only provisional:
+     * while the stretch is still WORKING the estimate is re-evaluated with the current elapsed time, and the break opens
+     * as soon as it is no longer short (including an Unknown estimate, i.e. too few past stretches lasted this long).
+     * A reopened break is never skipped again; later in the stretch only a "wrapping up" hint can appear, and only while
+     * a break is showing. Recomputed at most every [VIEW_INTERVAL_MS].
      */
     @Synchronized
     fun evaluate(nowMs: Long, breakShowing: Boolean): EtaView {
         val features = tracker.features(nowMs, zone) ?: return EtaView.NONE
         if (!reliableStretch) return EtaView(EtaAction.SHOW_AS_TODAY, null)
         cachedView?.takeIf { nowMs - it.atMs < VIEW_INTERVAL_MS && it.breakShowing == breakShowing }?.let { return it.view }
-        val view = if (skipStretch) EtaView(EtaAction.SKIP_BREAK, null) else {
-            val eta = predict(features)
-            // A skip is only ever decided at stretch start; later it would also block a break the user asked for.
+        val eta = predict(features)
+        val view = if (skipStretch && etaAction(decide(eta), breakShowing = false, eta = eta) == EtaAction.SKIP_BREAK) {
+            EtaView(EtaAction.SKIP_BREAK, null)
+        } else {
+            if (skipStretch) {
+                skipStretch = false
+                info("Reel Break: ETA reopened break after ${Math.round(features.stretchElapsedS)}s (stretch longer than usual)")
+            }
+            // A skip is only ever decided from the start of a stretch; later it would also block a break the user asked for.
             val action = etaAction(decide(eta), breakShowing, eta).let { if (it == EtaAction.SKIP_BREAK) EtaAction.SHOW_AS_TODAY else it }
             EtaView(action, etaBadgeText(eta, action))
         }
