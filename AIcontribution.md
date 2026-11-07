@@ -14,3 +14,4 @@
 | 2026-11-07 | Lane A (Claude) | Claude Code (Opus 5.5) | Agent ETA T0: temporary `Air activity seen` info log in `AirPaneActivity` to confirm Air activity enum names. | Pending human review. |
 | 2026-11-07 | Lane A (Claude) | Claude Code (Opus 5.5) | Agent ETA T1: `PaneActivity.activity`, `AgentState` model/mapping, and shared `EtaTypes.kt` contract for Lane B; stricter `PaneActivityTest`, new `AgentStateTest`. | Pending human review. |
 | 2026-11-07 | Lane B (Codex) | Codex/GPT | Agent ETA T2: conditional and unconditional percentile predictor with unit tests, tolerance fix, and additional edge-case tests. | Human hand-checked R type 7 values, found exact float-equality failures, and confirmed EtaPredictorTest passed locally after the tolerance fix; requested additional edge-case tests. |
+| 2026-11-07 | Lane B (Codex) | Codex/GPT | Agent ETA T3: p20 decision thresholds and boundary tests. | Pending human review. |
