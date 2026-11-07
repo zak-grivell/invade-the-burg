@@ -9,6 +9,9 @@ import java.time.Duration
 import java.time.Instant
 import java.time.format.DateTimeParseException
 
+/** States from which a WORKING stretch has a trustworthy start (and, symmetrically, a trustworthy end). */
+internal val CLEAN_STRETCH_STARTS = setOf(AgentState.NEEDS_PERMISSION, AgentState.DONE, AgentState.IDLE)
+
 /** One transition line as read back from the session log. */
 internal data class LogTransition(val sessionId: String, val ts: Instant, val from: AgentState, val to: AgentState)
 
@@ -28,15 +31,14 @@ internal class StretchExtractor {
             val seconds = Duration.between(start, t.ts).toMillis() / 1000.0
             if (seconds >= 0) stretch = Stretch(start, seconds)
         }
-        if (t.to == AgentState.WORKING && t.from in STRETCH_STARTS) pendingStart[t.sessionId] = t.ts
+        if (t.to == AgentState.WORKING && t.from in CLEAN_STRETCH_STARTS) pendingStart[t.sessionId] = t.ts
         return stretch
     }
 
     fun forget(sessionId: String) { pendingStart.remove(sessionId) }
 
     private companion object {
-        val STRETCH_STARTS = setOf(AgentState.NEEDS_PERMISSION, AgentState.DONE, AgentState.IDLE)
-        val STRETCH_ENDS = STRETCH_STARTS
+        val STRETCH_ENDS = CLEAN_STRETCH_STARTS
     }
 }
 

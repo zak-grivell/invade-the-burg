@@ -2,6 +2,7 @@ package com.github.zakgrivell.invadetheburg.eta
 
 import com.github.zakgrivell.invadetheburg.services.PaneActivity
 import com.github.zakgrivell.invadetheburg.services.eta.Eta
+import com.github.zakgrivell.invadetheburg.services.eta.EtaAction
 import com.github.zakgrivell.invadetheburg.services.eta.EtaFeatures
 import com.github.zakgrivell.invadetheburg.services.eta.EtaMonitor
 import com.github.zakgrivell.invadetheburg.services.eta.EtaPredictorApi
@@ -168,5 +169,97 @@ class EtaMonitorTest {
 
     private fun fixedBySize() = { h: List<Double> ->
         object : EtaPredictorApi { override fun predict(f: EtaFeatures) = Eta.Estimate(0.0, h.size.toDouble(), 0.0) }
+    }
+
+    // ---- ETA-driven behaviour (T9) ----
+
+    private fun monitorWith(fn: (EtaFeatures) -> Eta) = monitor { _ ->
+        object : EtaPredictorApi { override fun predict(f: EtaFeatures) = fn(f) }
+    }
+
+    private fun EtaMonitor.startStretch() {
+        observe(pane("READY"), t0)
+        observe(pane("PROCESSING"), t0 + 1_000)
+    }
+
+    @Test fun `p20 under 30 at stretch start skips the break and forceBreak lifts it`() {
+        val m = monitorWith { Eta.Estimate(10.0, 20.0, 40.0) }
+        m.startStretch()
+        assertEquals(EtaAction.SKIP_BREAK, m.evaluate(t0 + 1_000, breakShowing = false).action)
+        assertNull(m.evaluate(t0 + 1_000, false).badge)
+        m.forceBreak()
+        val view = m.evaluate(t0 + 1_000, breakShowing = true)
+        assertEquals(EtaAction.WRAPPING_UP_HINT, view.action)
+        assertEquals("Wrapping up…", view.badge)
+    }
+
+    @Test fun `long estimate shows the break with a minutes badge`() {
+        val m = monitorWith { Eta.Estimate(100.0, 100.0, 200.0) }
+        m.startStretch()
+        val view = m.evaluate(t0 + 1_000, breakShowing = false)
+        assertEquals(EtaAction.SHOW_AS_TODAY, view.action)
+        assertEquals("~2 min left", view.badge)
+    }
+
+    @Test fun `unknown estimate behaves as today with no badge`() {
+        val m = monitorWith { Eta.Unknown }
+        m.startStretch()
+        assertEquals(com.github.zakgrivell.invadetheburg.services.eta.EtaView(EtaAction.SHOW_AS_TODAY, null), m.evaluate(t0 + 1_000, false))
+    }
+
+    @Test fun `no WORKING stretch means no ETA input`() {
+        val m = monitorWith { Eta.Estimate(1.0, 1.0, 1.0) }
+        assertEquals(EtaAction.NONE, m.evaluate(t0, false).action)
+        m.observe(pane("READY"), t0)
+        assertEquals(EtaAction.NONE, m.evaluate(t0, false).action)
+    }
+
+    @Test fun `a stretch whose start was not observed is never skipped or hinted`() {
+        val m = monitorWith { Eta.Estimate(1.0, 2.0, 3.0) }
+        m.observe(pane("PROCESSING"), t0)  // first sighting mid-WORKING: elapsed 0 would be a lie
+        val view = m.evaluate(t0, breakShowing = true)
+        assertEquals(EtaAction.SHOW_AS_TODAY, view.action)
+        assertNull(view.badge)
+    }
+
+    @Test fun `mid-stretch only a hint can appear, never a skip`() {
+        val m = monitorWith { Eta.Estimate(100.0 - it.stretchElapsedS, 120.0 - it.stretchElapsedS, 150.0) }
+        m.startStretch()
+        assertEquals(EtaAction.SHOW_AS_TODAY, m.evaluate(t0 + 1_000, false).action)
+        val late = t0 + 81_000  // elapsed 80 s: p20 = 20
+        assertEquals(EtaAction.WRAPPING_UP_HINT, m.evaluate(late, breakShowing = true).action)
+        assertEquals(EtaAction.SHOW_AS_TODAY, m.evaluate(late + 2_000, breakShowing = false).action)
+    }
+
+    @Test fun `a new stretch after a permission wait is decided afresh`() {
+        var p20 = 10.0
+        val m = monitorWith { Eta.Estimate(p20, p20 + 5, p20 + 10) }
+        m.startStretch()
+        assertEquals(EtaAction.SKIP_BREAK, m.evaluate(t0 + 1_000, false).action)
+        m.observe(pane("NEEDS_INPUT"), t0 + 5_000)
+        p20 = 100.0
+        m.observe(pane("PROCESSING"), t0 + 9_000)
+        assertEquals(EtaAction.SHOW_AS_TODAY, m.evaluate(t0 + 9_000, false).action)
+    }
+
+    @Test fun `the view is recomputed at most once per second`() {
+        var calls = 0
+        val m = monitorWith { calls++; Eta.Estimate(100.0, 100.0, 200.0) }
+        m.startStretch()
+        m.evaluate(t0 + 2_000, false)
+        val after = calls
+        m.evaluate(t0 + 2_300, false)
+        m.evaluate(t0 + 2_900, false)
+        assertEquals(after, calls)
+        m.evaluate(t0 + 3_000, false)
+        assertEquals(after + 1, calls)
+    }
+
+    @Test fun `a throwing predictor yields today's behaviour`() {
+        val m = monitorWith { error("boom") }
+        m.startStretch()
+        val view = m.evaluate(t0 + 1_000, false)
+        assertEquals(EtaAction.SHOW_AS_TODAY, view.action)
+        assertNull(view.badge)
     }
 }

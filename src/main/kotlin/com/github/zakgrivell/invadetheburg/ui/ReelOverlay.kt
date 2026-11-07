@@ -6,6 +6,11 @@ import com.intellij.openapi.components.service
 import com.github.zakgrivell.invadetheburg.settings.ReelSettings
 import com.github.zakgrivell.invadetheburg.settings.FavoriteWebsite
 import java.awt.BorderLayout
+import java.awt.Color
+import java.awt.FlowLayout
+import java.awt.Graphics
+import java.awt.Graphics2D
+import java.awt.RenderingHints
 import java.awt.Rectangle
 import javax.swing.JButton
 import javax.swing.JComboBox
@@ -25,6 +30,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         addActionListener { resume() }
     }
     private var view: JPanel? = null
+    private val etaBadge = EtaBadge()
     private var updatingSwitcher = false
     private var switcherItems: List<FavoriteWebsite> = emptyList()
     private val websiteSwitcher = JComboBox<FavoriteWebsite>().apply {
@@ -70,6 +76,17 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         override fun dispose() {}
     }
 
+    val isShowing: Boolean get() = view?.isVisible == true
+
+    /** Null hides the badge. Safe to call every poll; it only repaints on change. */
+    fun setEtaBadge(text: String?) {
+        if (etaBadge.text == (text ?: "") && etaBadge.isVisible == (text != null)) return
+        etaBadge.text = text ?: ""
+        etaBadge.isVisible = text != null
+        etaBadge.parent?.revalidate()
+        etaBadge.parent?.repaint()
+    }
+
     fun showOver(editor: JComponent, url: String): Boolean {
         hideReturnButton()
         val root = SwingUtilities.getRootPane(editor) ?: return false
@@ -83,7 +100,12 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         if (view == null) {
             view = JPanel(BorderLayout()).apply {
                 add(JPanel(BorderLayout()).apply {
-                    add(JBLabel("  Reel Break · hides when your agent finishes"), BorderLayout.CENTER)
+                    // The native browser below is a heavyweight component that would hide anything drawn over it,
+                    // so the badge sits in the header bar rather than on the video.
+                    add(JPanel(FlowLayout(FlowLayout.LEFT, 6, 2)).apply {
+                        add(JBLabel("  Reel Break · hides when your agent finishes"))
+                        add(etaBadge)
+                    }, BorderLayout.CENTER)
                     add(JPanel().apply {
                         add(websiteSwitcher)
                         add(JButton("Settings").apply { addActionListener { settings() } })
@@ -153,5 +175,28 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         layer?.repaint()
         view = null
         layer = null
+    }
+}
+
+/** Small pill with a semi-transparent dark background and white text; hidden until it has text. */
+private class EtaBadge : JBLabel() {
+    init {
+        isOpaque = false
+        isVisible = false
+        foreground = Color.WHITE
+        border = javax.swing.BorderFactory.createEmptyBorder(2, 10, 2, 10)
+        toolTipText = "Estimated time until your agent finishes this step"
+    }
+
+    override fun paintComponent(g: Graphics) {
+        val g2 = g.create() as Graphics2D
+        try {
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+            g2.color = Color(0, 0, 0, 170)
+            g2.fillRoundRect(0, 0, width, height, height, height)
+        } finally {
+            g2.dispose()
+        }
+        super.paintComponent(g)
     }
 }

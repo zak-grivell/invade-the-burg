@@ -35,11 +35,25 @@ internal class EtaMonitor(
     private var pendingPrediction: Pair<Long, Eta>? = null
     private var lastAdvisoryMs: Long? = null
 
+    // Per-stretch ETA behaviour. Only stretches whose start we saw are trusted: a pane that was already WORKING when
+    // first observed would otherwise look like elapsed = 0 and be wrongly skipped or hinted.
+    private var reliableStretch = false
+    private var skipStretch = false
+    private var cachedView: CachedView? = null
+
+    private class CachedView(val atMs: Long, val breakShowing: Boolean, val view: EtaView)
+
     init {
         tracker.addListener(SessionLogWriter(sink))
         tracker.addListener(object : AgentStateListener {
             override fun onTransition(t: StateTransition) {
-                if (t.to == AgentState.WORKING) pendingPrediction = t.tsMs to predictNow(t.tsMs)
+                if (t.to == AgentState.WORKING) {
+                    val eta = predictNow(t.tsMs)
+                    pendingPrediction = t.tsMs to eta
+                    reliableStretch = t.from in CLEAN_STRETCH_STARTS
+                    skipStretch = reliableStretch && etaAction(decide(eta), breakShowing = false, eta = eta) == EtaAction.SKIP_BREAK
+                    cachedView = null
+                }
             }
             override fun onSessionEnd(e: SessionEnd) {}
         })
@@ -55,6 +69,32 @@ internal class EtaMonitor(
             lastAdvisoryMs = nowMs
             debug("Reel Break: ETA advisory: stretchElapsed=${features.stretchElapsedS}s eta=${predict(features)}")
         }
+    }
+
+    /**
+     * What the overlay should do right now. A skip is decided once, at the start of a trusted stretch; later in the
+     * stretch only a "wrapping up" hint can appear, and only while a break is showing. Cached for [VIEW_INTERVAL_MS].
+     */
+    @Synchronized
+    fun evaluate(nowMs: Long, breakShowing: Boolean): EtaView {
+        val features = tracker.features(nowMs, zone) ?: return EtaView.NONE
+        if (!reliableStretch) return EtaView(EtaAction.SHOW_AS_TODAY, null)
+        cachedView?.takeIf { nowMs - it.atMs < VIEW_INTERVAL_MS && it.breakShowing == breakShowing }?.let { return it.view }
+        val view = if (skipStretch) EtaView(EtaAction.SKIP_BREAK, null) else {
+            val eta = predict(features)
+            // A skip is only ever decided at stretch start; later it would also block a break the user asked for.
+            val action = etaAction(decide(eta), breakShowing, eta).let { if (it == EtaAction.SKIP_BREAK) EtaAction.SHOW_AS_TODAY else it }
+            EtaView(action, etaBadgeText(eta, action))
+        }
+        cachedView = CachedView(nowMs, breakShowing, view)
+        return view
+    }
+
+    /** The user explicitly asked for the break back: stop skipping it for the rest of this stretch. */
+    @Synchronized
+    fun forceBreak() {
+        skipStretch = false
+        cachedView = null
     }
 
     /** Ends any open session as abandoned; call on dispose. */
@@ -121,6 +161,7 @@ internal class EtaMonitor(
 
     companion object {
         const val ADVISORY_INTERVAL_MS = 10_000L
+        const val VIEW_INTERVAL_MS = 1_000L
 
         fun createDefault(): EtaMonitor {
             val log = logger<EtaMonitor>()

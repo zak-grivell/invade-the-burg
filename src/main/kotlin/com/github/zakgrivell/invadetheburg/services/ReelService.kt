@@ -10,7 +10,9 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.github.zakgrivell.invadetheburg.ui.ReelOverlay
+import com.github.zakgrivell.invadetheburg.services.eta.EtaAction
 import com.github.zakgrivell.invadetheburg.services.eta.EtaMonitor
+import com.github.zakgrivell.invadetheburg.services.eta.EtaView
 import com.intellij.openapi.diagnostic.logger
 import javax.swing.Timer
 
@@ -22,7 +24,7 @@ class ReelService(private val project: Project) : Disposable {
     private val timer = Timer(200) { pollPane() }
     private val overlay = ReelOverlay(
         dismiss = { dismiss() },
-        resume = { state.resume(); pollPane() },
+        resume = { state.resume(); etaGuard { eta?.forceBreak() }; pollPane() },
         settings = { ShowSettingsUtil.getInstance().showSettingsDialog(project, ReelSettingsConfigurable::class.java) }
     )
     private var disposed = false
@@ -48,13 +50,24 @@ class ReelService(private val project: Project) : Disposable {
         val pane = AirPaneActivity.read(manager.selectedFiles.firstOrNull())
         eta?.let { monitor -> etaGuard { monitor.observe(pane, System.currentTimeMillis()) } }
         val editor = manager.selectedEditor?.component
-        if (state.update(pane) && editor != null) {
+        val wantBreak = state.update(pane)
+        val view = etaView()
+        overlay.setEtaBadge(view?.badge)
+        if (wantBreak && view?.action != EtaAction.SKIP_BREAK && editor != null) {
             // Reposition on each tick so the overlay follows pane resizing and split editors.
             if (!overlay.showOver(editor, service<ReelSettings>().url)) overlay.hide()
         } else {
             overlay.hide()
             if (pane?.processing == true && editor != null) overlay.showReturnButton(editor)
         }
+    }
+
+    /** Null means "behave exactly as without ETA": the setting is off, ETA is unavailable, or it failed. */
+    private fun etaView(): EtaView? {
+        val monitor = eta ?: return null
+        if (!service<ReelSettings>().useEtaToTimeBreaks) return null
+        return runCatching { monitor.evaluate(System.currentTimeMillis(), overlay.isShowing) }
+            .onFailure { logEtaFailureOnce(it) }.getOrNull()
     }
 
     private fun startEtaHistory() {
@@ -64,9 +77,11 @@ class ReelService(private val project: Project) : Disposable {
     }
 
     private fun etaGuard(block: () -> Unit) {
-        runCatching(block).onFailure {
-            if (!etaFailureLogged) { etaFailureLogged = true; LOG.warn("Reel Break: ETA tracking failed", it) }
-        }
+        runCatching(block).onFailure { logEtaFailureOnce(it) }
+    }
+
+    private fun logEtaFailureOnce(failure: Throwable) {
+        if (!etaFailureLogged) { etaFailureLogged = true; LOG.warn("Reel Break: ETA tracking failed", failure) }
     }
 
     override fun dispose() {
