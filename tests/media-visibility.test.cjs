@@ -17,6 +17,9 @@ function fixture(instagram = true, code = script) {
             videos.push(this);
         }
         getBoundingClientRect() { return this.rect; }
+        querySelectorAll() { return this.sources || []; }
+        canPlayType(type) { return type === 'video/mp4' ? 'probably' : ''; }
+        load() { this.loads = (this.loads || 0) + 1; this.error = null; }
         pause() { this.pauses++; const changed = !this.paused; this.paused = true; if (changed) emit('pause', this); }
         play() {
             this.plays++;
@@ -68,9 +71,8 @@ function fixture(instagram = true, code = script) {
     {
         const f = fixture(false), video = f.media(false); video.soundBlocked = true;
         f.visibility(false);
-        await assert.rejects(video.play(), {name: 'NotAllowedError'});
-        assert.equal(video.plays, 1); assert.equal(video.muted, false, 'unrelated websites keep their own policy');
-        assert.equal(f.state().failures[0].name, 'NotAllowedError');
+        await video.play();
+        assert.equal(video.plays, 2); assert.equal(video.muted, true, 'all configured sites can recover from an autoplay policy rejection');
     }
     {
         const f = fixture(), video = f.media(false); video.blocked = true;
@@ -179,7 +181,34 @@ function fixture(instagram = true, code = script) {
         for (let i = 0; i < 20; i++) f.visibility(false);
         assert.equal(f.state().retryButton, retryButton, 'repeated polls retain one retry control');
     }
+    {
+        const f = fixture(false), video = f.media(false); f.visibility(false);
+        video.currentSrc = 'bad.webm'; video.src = 'bad.webm'; video.error = {code: 4};
+        video.sources = [{src: 'also-bad.webm', type: 'video/unknown'}, {src: 'fallback.mp4', type: 'video/mp4'}];
+        f.emit('error', video);
+        assert.equal(f.state().failures.at(-1).name, 'MediaSourceUnsupported');
+        assert.equal(f.state().failures.at(-1).mediaError, 4);
+        assert.equal(video.loads, undefined, 'no automatic reload on codec errors');
+        f.state().retryButton.click(); await tick();
+        assert.equal(video.src, 'fallback.mp4'); assert.equal(video.loads, 1); assert.equal(video.paused, false);
+    }
+    {
+        const f = fixture(), video = f.media(false); f.visibility(false);
+        video.src = 'blob:site-owned'; video.error = {code: 3}; f.emit('error', video);
+        f.state().retryButton.click(); await tick();
+        assert.equal(video.loads, undefined, 'never reset a site-owned MSE pipeline');
+    }
+    {
+        const f = fixture(), video = f.media(false); f.visibility(true);
+        f.emit('error', Object.assign(video, {error: {code: 4}}));
+        assert.equal(f.state().failures.length, 0, 'hidden preload failures do not show recovery controls');
+    }
+    {
+        const f = fixture(), video = f.media(false); f.visibility(true);
+        video.error = {code: 4}; f.emit('error', video); f.visibility(false);
+        assert.equal(f.state().retryButton.isConnected, true, 'a codec failure during hidden startup is surfaced on reveal');
+    }
     assert.equal(script.includes('setInterval'), false);
     assert.equal(script.includes("addEventListener('scroll'"), false, 'scrolling never controls playback');
-    console.log('Passed 15 player-ownership scenarios: scroll-snap handoff, policy fallback, cancellation, reused elements, hidden races, manual pause, and native promise semantics.');
+    console.log('Passed 19 playback scenarios: scroll-snap handoff, policy fallback, cancellation, reused elements, hidden races, manual pause, and native promise semantics.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

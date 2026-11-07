@@ -73,7 +73,7 @@ internal class SystemBreakPage(url: String, private val ownsPlaybackControls: Bo
             (function () {
                 window.__reelBreakOwnPlaybackControls = $ownsPlaybackControls;
                 window.__reelBreakPaneActive = false;
-                ${if (ownsPlaybackControls) "" else mediaScript.replace("/*HIDDEN*/", "document.hidden")}
+                ${if (ownsPlaybackControls) "" else mediaScript.replace("/*HIDDEN*/", "true")}
                 const ready = function () {
                     try { if (typeof window.reelBreakDocumentReady === 'function') window.reelBreakDocumentReady(''); } catch (_) {}
                 };
@@ -91,6 +91,17 @@ internal class SystemBreakPage(url: String, private val ownsPlaybackControls: Bo
         view.setUrl(requestedUrl)
         container.removeAll()
         container.add(view, BorderLayout.CENTER)
+        if (!ownsPlaybackControls) container.add(JPanel(java.awt.FlowLayout(java.awt.FlowLayout.RIGHT)).apply {
+            add(JButton("Retry video").apply {
+                toolTipText = "Retry the visible video, using another declared format when available"
+                addActionListener { view.eval("if (window.__reelBreakRetryMedia) window.__reelBreakRetryMedia(true);") }
+            })
+            add(JButton("Reload page").apply { addActionListener { view.setUrl(requestedUrl) } })
+            add(JButton("Open in browser").apply {
+                toolTipText = "Use your default browser if this embedded browser cannot decode a video"
+                addActionListener { com.intellij.ide.BrowserUtil.browse(requestedUrl) }
+            })
+        }, BorderLayout.SOUTH)
         container.revalidate()
         container.repaint()
         pushVisibility()

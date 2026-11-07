@@ -27,9 +27,13 @@ To use an installed IDE instead of downloading one, add `-PlocalPlatformPath="/p
 
 ## Browser playback
 
-Reel Break 1.2.3 leaves Reel selection, scrolling, and playback timing to Instagram's player. It no longer pauses videos based on their relative size or starts videos in response to scroll/readiness timers. A rejected Instagram `play()` request gets one muted inline fallback only for `NotAllowedError`; website cancellations retain their original promise behavior. Explicit site/user pauses cancel retained resumes. Hidden pages retain their document and pause media; showing the page resumes previously playing media only when the source is unchanged and still visible. A slow play request is never aborted by a plugin watchdog.
+Reel Break leaves Reel selection, scrolling, and playback timing to Instagram's player. It no longer pauses videos based on their relative size or starts videos in response to scroll/readiness timers. A rejected video `play()` request on any configured website gets one muted inline fallback only for `NotAllowedError`; website cancellations retain their original promise behavior. Explicit site/user pauses cancel retained resumes. Hidden pages retain their document and pause media; showing the page resumes previously playing media only when the source is unchanged and still visible. A slow play request is never aborted by a plugin watchdog.
 
 Validation: `node tests/media-visibility.test.cjs`; the `smokeTestMedia` Gradle task exercises native H.264 playback, 12 consecutive site-owned scroll-snap handoffs, manual pause, and repeated hide/show cycles. Native Windows/Linux execution still requires their respective runners.
+
+Decoder/network failures are captured even when native autoplay never calls JavaScript `play()`. **Retry source** reloads failed direct media and selects a declared alternative the engine reports as playable. It never resets a site-owned blob/MediaSource stream automatically. **Reload page** restarts a stuck website; **Open in browser** opens the configured website in your default browser when the embedded engine lacks a codec (sign-in may be separate). The plugin cannot install missing OS decoders. New documents start paused until the IDE supplies the pane's actual visibility.
+
+The native **Retry video** control also runs recovery through the host browser call. For a manual IDE decoder test, run `node tests/ide-media-fixture.cjs /path/to/h264.mp4`, open its printed URL using Setup, then click Retry video. The fixture starts with invalid media and a valid MP4 alternative; verify that error 4 clears and playback time advances. Automated playback coverage includes 19 JavaScript scenarios and the native smoke task above.
 
 ## Chat response videos
 

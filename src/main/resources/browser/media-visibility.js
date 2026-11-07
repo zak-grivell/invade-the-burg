@@ -12,7 +12,6 @@
         const nativePlay = prototype.play, nativePause = prototype.pause;
         const intents = new WeakMap(), retainedSources = new WeakMap();
         const sourceOf = media => media.src || media.currentSrc || '';
-        const instagram = () => /(^|\.)instagram\.com$/i.test(window.location.hostname);
         const visibleArea = function (media) {
             if (!media.isConnected || media.ended) return 0;
             const rect = media.getBoundingClientRect();
@@ -38,7 +37,8 @@
             }
             if (state.retryButton || !document.documentElement) return;
             const button = document.createElement('button');
-            button.textContent = 'Play / Retry video';
+            const unsupported = Array.from(state.paused).some(media => media.error && [3, 4].includes(media.error.code));
+            button.textContent = unsupported ? 'Video format failed — retry source' : 'Play / Retry video';
             button.setAttribute('type', 'button');
             button.setAttribute('aria-label', 'Resume video playback');
             button.style.cssText = 'all:initial;position:fixed;bottom:20px;right:20px;z-index:2147483647;padding:12px 18px;border-radius:8px;background:#2762df;color:white;font:14px sans-serif;cursor:pointer;box-shadow:0 2px 12px #0006;';
@@ -61,7 +61,8 @@
         };
         const report = function (media, error) {
             state.lastError = (error && error.name) || 'PlaybackError';
-            const failure = {name: state.lastError, readyState: media.readyState, muted: media.muted, time: Date.now()};
+            const failure = {name: state.lastError, mediaError: media.error ? media.error.code : null,
+                readyState: media.readyState, networkState: media.networkState, muted: media.muted, time: Date.now()};
             state.failures.push(failure);
             if (state.failures.length > 20) state.failures.shift();
             try { if (window.reelBreakPlaybackFailure) window.reelBreakPlaybackFailure(JSON.stringify(failure)); } catch (_) {}
@@ -105,8 +106,8 @@
                 if (state.hidden) nativePause.call(media);
                 if (!result || typeof result.then !== 'function') return succeeded(result);
                 return result.catch(function (error) {
-                    if (valid() && !state.hidden && instagram() && media.tagName === 'VIDEO' && !media.muted && error.name === 'NotAllowedError') {
-                        // Only repair a browser policy rejection of the site's chosen video.
+                    if (valid() && !state.hidden && media.tagName === 'VIDEO' && !media.muted && error.name === 'NotAllowedError') {
+                        // One policy fallback for the site's chosen video, on every configured website.
                         media.muted = true; media.playsInline = true;
                         return nativePlay.call(media);
                     }
@@ -131,7 +132,19 @@
             if (state.hidden) return;
             if (includeVisible) {
                 const current = currentVideo();
-                if (current) resume(current);
+                if (current) {
+                    // Only a user retry may reset a failed decoder. Leave site-owned
+                    // MediaSource/blob streams intact.
+                    if (current.error && [2, 3, 4].includes(current.error.code) &&
+                        !sourceOf(current).startsWith('blob:') && !current.srcObject) {
+                        const failedSource = current.currentSrc || current.src;
+                        const alternate = Array.from(current.querySelectorAll('source')).find(source =>
+                            source.src && source.src !== failedSource && source.type && current.canPlayType(source.type));
+                        if (alternate) current.src = alternate.src;
+                        current.load();
+                    }
+                    resume(current);
+                }
             } else {
                 Array.from(state.paused).forEach(function (media) {
                     if (canResume(media) && retainedSources.get(media) === sourceOf(media)) resume(media);
@@ -154,7 +167,15 @@
                     cancel(media);
                     if (!media.paused) nativePause.call(media);
                 });
-            } else if (changed) retry(false);
+            } else if (changed) {
+                retry(false);
+                // Native autoplay/source failures can happen before the host reveals us.
+                document.querySelectorAll('video, audio').forEach(function (media) {
+                    if (canResume(media) && media.error && [2, 3, 4].includes(media.error.code)) {
+                        report(media, {name: 'MediaLoadError'});
+                    }
+                });
+            }
             updateRetryButton(); notifyChildren();
         };
         window.__reelBreakRetryMedia = retry;
@@ -180,6 +201,12 @@
                 state.paused.delete(media); retainedSources.delete(media); updateRetryButton();
             }, true);
         });
+        document.addEventListener('error', function (event) {
+            const media = event.target;
+            if (media && (media.tagName === 'VIDEO' || media.tagName === 'AUDIO') && media.error && [2, 3, 4].includes(media.error.code) && !state.hidden) {
+                report(media, {name: ['MediaError', 'MediaAborted', 'MediaNetworkError', 'MediaDecodeError', 'MediaSourceUnsupported'][media.error.code] || 'MediaError'});
+            }
+        }, true);
         document.addEventListener('load', function (event) {
             if (event.target && event.target.tagName === 'IFRAME') notifyChildren();
         }, true);
