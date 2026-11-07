@@ -22,6 +22,14 @@ Diagram placeholder: agent pane signals → break state → overlay / native bro
 
 All agents follow [AGENTS.md](AGENTS.md). Tools and task contributions are recorded in [AIcontribution.md](AIcontribution.md).
 
+### Multi-agent workflow (Agent ETA)
+
+- Lanes: Lane A (Claude Code, Opus for planning, Sonnet for implementation) built state tracking, session log, history and IDE wiring; Lane B (Codex 6 Sol) built the predictor, decision rule and evaluation in a separate git worktree, coding against a shared contract (EtaTypes.kt) committed first.
+- Head-to-head (T2 EtaPredictor, same spec): Codex matched the spec exactly but its tests used exact float equality (2/4 failed, e.g. 204.00000000000003); Claude Sonnet wrote 15 passing tests with broader edge cases but clamped before taking percentiles, giving p80=20 instead of 4 at elapsed 200 — its tests encoded its own behaviour. Both caught by Sean's hand-calculated R type 7 values. Kept Codex's implementation, fixed its test tolerance, ported Claude's extra edge-case tests. Lesson: passing tests ≠ correct; expected values must come from the spec.
+- Cross-review: Codex reviewed Lane A and found two valid issues (stretches crossing UTC midnight were lost; predictor rebuild held a lock on the 200 ms EDT poll). Both fixed by Claude, accepted by Sean.
+- Human verification: Codex's sandbox couldn't run Gradle, so Sean ran all Lane B tests and evaluateEta locally, catching a runtime classpath bug (kotlin stdlib missing from the JavaExec task).
+- Live testing changes driven by the human: skip made provisional (reopen when a stretch outlasts typical history); badge moved to its own row with a "Longer than usual" state after observing it hidden in a narrow pane.
+
 Licensed under the [GNU General Public License v3.0](LICENSE) (SPDX: `GPL-3.0-only`).
 
 ![Build](https://github.com/zak-grivell/invade-the-burg/workflows/Build/badge.svg)

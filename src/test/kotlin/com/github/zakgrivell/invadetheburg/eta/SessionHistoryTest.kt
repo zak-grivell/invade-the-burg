@@ -128,9 +128,11 @@ class SessionHistoryTest {
 
     @Test fun `startup summary names the paths and whether the seed exists`() {
         val seed = resource("seed-history.example.jsonl")
-        val logs = Path.of("/logs")
-        assertEquals("Reel Break: ETA history: logDir=/logs, seed=$seed (found)", SessionHistory.startupSummary(logs, seed))
-        assertTrue(SessionHistory.startupSummary(logs, Path.of("/nope.jsonl")).endsWith("(not found)"))
+        // Paths are rendered with the platform separator, so build expectations from the same Path objects.
+        val logs = tmp.root.toPath().resolve("logs")
+        val missing = tmp.root.toPath().resolve("nope.jsonl")
+        assertEquals("Reel Break: ETA history: logDir=${logs}, seed=${seed} (found)", SessionHistory.startupSummary(logs, seed))
+        assertEquals("Reel Break: ETA history: logDir=${logs}, seed=${missing} (not found)", SessionHistory.startupSummary(logs, missing))
     }
 
     @Test fun `live stretches match what the log would later parse to`() {
