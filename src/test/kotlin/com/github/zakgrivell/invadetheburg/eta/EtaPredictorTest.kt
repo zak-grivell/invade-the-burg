@@ -86,7 +86,7 @@ class EtaPredictorTest {
         val xs = listOf(10.0, 20.0, 30.0, 40.0)
         assertEquals(10.0, percentile(xs, 0.0), 1e-9)
         assertEquals(25.0, percentile(xs, 0.5), 1e-9)
-        assertEquals(19.0, percentile(xs, 0.3), 1e-9) // h = 0.9 -> 10 + 0.9*10... = 19
+        assertEquals(19.0, percentile(xs, 0.3), 1e-9) // h = 0.9 -> 10 + 0.9*10 = 19
         assertEquals(40.0, percentile(xs, 1.0), 1e-9)
         assertEquals(7.0, percentile(listOf(7.0), 0.8), 1e-9)
     }
