@@ -79,10 +79,10 @@ tasks.register<JavaExec>("smokeTestMedia") {
 
 tasks.register<JavaExec>("smokeTestRecapVideo") {
     group = "verification"
+    description = "Verify bundled footage and native narration autoplay, visibility and completion"
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath + sourceSets.test.get().compileClasspath + mediaSmokeRuntime
     mainClass = "com.github.zakgrivell.invadetheburg.RecapVideoSmoke"
-    providers.gradleProperty("recapSmokeVideo").orNull?.let { args(it) }
     systemProperty("java.awt.headless", "false")
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }

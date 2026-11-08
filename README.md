@@ -73,13 +73,13 @@ The ElevenLabs voice reads the **complete final agent response** directly. No ge
 
 Set the Peter Griffin voice ID in Reel Break settings, `ELEVENLABS_VOICE_ID`, or `~/.config/reel-break/elevenlabs-voice-id`. Narration uses the [hosted Heroku service](https://hack-the-burg-elevenlabs-eec39ae58d6f.herokuapp.com/health), which holds the ElevenLabs API key server-side. No local API key is required, read or sent by the plugin. Spoken response text passes through this service to ElevenLabs and consumes the hosted account's API credits. Private reasoning, raw tool output, attachments, reverted messages and older turns are excluded.
 
-The temporary background is MDN's [CC0 flower footage](https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4). **Recap video URL or file** accepts a direct HTTP/HTTPS video URL or an absolute path to a local gameplay MP4. Local media is served through a random-token loopback URL; chat text/audio remain in memory. Closing the player stops its browser and media server.
+The recap always uses bundled footage from the original Prism Courier recording. A compressed 90-second excerpt loops during narration. No video URL, local file or source setting is needed. The footage is served from the plugin through its private loopback media URL.
 
-Validation: `test` covers speech text, defaults/persistence, transcript reading, media ranges and local video replacement. `smokeTestRecapVideo` checks native voice/video playback, portrait dimensions, black surroundings, pause and end behavior.
+Validation: `test` covers speech text, defaults/persistence, transcript reading, media ranges and bundled recording playback. `smokeTestRecapVideo` checks native voice/video playback, portrait dimensions, black surroundings, pause and end behavior.
 
-An optional `~/.config/reel-break/recap-video-source` file supplies a local default video URL/path when the stock default is selected. An explicit video chosen in settings takes precedence. WebM and MP4 local video are supported.
+Old video-source settings and local overrides are ignored.
 
-The Play button is hidden until both video and speech audio can play. Playback starts from Play, rather than an autoplay attempt. Blocked/cancelled playback requests do not display a video-load error. Media requests are served concurrently so large gameplay transfers do not block voice loading. Validate readiness behavior with `node tests/recap-player.test.cjs`.
+Narration and bundled footage start automatically once both are ready. A Play fallback appears if autoplay is blocked. Blocked/cancelled playback requests do not display a video-load error. Media requests are served concurrently so large gameplay transfers do not block voice loading. Validate readiness behavior with `node tests/recap-player.test.cjs`.
 
 ## Agent ETA
 

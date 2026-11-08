@@ -3,25 +3,10 @@ package com.github.zakgrivell.invadetheburg.ui
 import java.util.Base64
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
-import java.net.URI
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.file.Files
-import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.Executors
-
-internal const val DEFAULT_RECAP_VIDEO = "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
-
-internal fun normalizeRecapVideo(value: String): String {
-    val source = value.trim()
-    if (source.startsWith("https://") || source.startsWith("http://")) {
-        require(!runCatching { URI(source).host }.getOrNull().isNullOrBlank()) { "Enter a complete video URL or an absolute local video path." }
-    } else {
-        require(Path.of(source).isAbsolute && Files.isRegularFile(Path.of(source))) { "Choose an existing local video file or enter an HTTP/HTTPS video URL." }
-    }
-    return source
-}
 
 internal fun pcmWave(pcm: ByteArray): ByteArray = ByteBuffer.allocate(44 + pcm.size).order(ByteOrder.LITTLE_ENDIAN).apply {
     put("RIFF".toByteArray()); putInt(36 + pcm.size); put("WAVEfmt ".toByteArray()); putInt(16)
@@ -29,11 +14,13 @@ internal fun pcmWave(pcm: ByteArray): ByteArray = ByteBuffer.allocate(44 + pcm.s
     put("data".toByteArray()); putInt(pcm.size); put(pcm)
 }.array()
 
+private val bundledRecapVideo by lazy { RecapMedia::class.java.getResource("/media/subway-runner.mp4")!!.readBytes() }
+
 /** In-memory page/audio, with access limited to an unguessable loopback URL. */
-internal class RecapMedia(private val text: String, audio: ByteArray, videoSource: String, private val autoPlay: Boolean = true) : AutoCloseable {
+internal class RecapMedia(private val text: String, audio: ByteArray, private val autoPlay: Boolean = true) : AutoCloseable {
     private val token = UUID.randomUUID().toString()
     private val audio = pcmWave(audio)
-    private val video = normalizeRecapVideo(videoSource)
+    private val video = bundledRecapVideo
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
     private val workers = Executors.newFixedThreadPool(4) { task -> Thread(task, "Reel recap media").apply { isDaemon = true } }
     val url: String get() = "http://127.0.0.1:${server.address.port}/$token/index.html"
@@ -42,21 +29,20 @@ internal class RecapMedia(private val text: String, audio: ByteArray, videoSourc
         server.createContext("/$token/") { exchange ->
             try {
                 val route = exchange.requestURI.path.removePrefix("/$token/")
-                val localVideo = if (route == "background.mp4" && !video.startsWith("http")) Path.of(video) else null
                 val (type, data) = when (route) {
-                    "index.html" -> "text/html; charset=utf-8" to recapVideoHtml(text, if (video.startsWith("http")) video else "background.mp4", autoPlay).toByteArray()
+                    "index.html" -> "text/html; charset=utf-8" to recapVideoHtml(text, autoPlay).toByteArray()
                     "voice.wav" -> "audio/wav" to this.audio
-                    "background.mp4" -> if (localVideo != null) (if (video.lowercase().endsWith(".webm")) "video/webm" else "video/mp4") to null else null to null
+                    "background.mp4" -> "video/mp4" to video
                     else -> null to null
                 }
-                if ((data == null && localVideo == null) || exchange.requestMethod !in setOf("GET", "HEAD")) {
+                if (data == null || exchange.requestMethod !in setOf("GET", "HEAD")) {
                     exchange.sendResponseHeaders(404, -1)
                 } else {
                     exchange.responseHeaders.set("Content-Type", type)
                     exchange.responseHeaders.set("Cache-Control", "no-store")
                     exchange.responseHeaders.set("Referrer-Policy", "no-referrer")
                     exchange.responseHeaders.set("Accept-Ranges", "bytes")
-                    val size = localVideo?.let(Files::size) ?: data!!.size.toLong()
+                    val size = data.size.toLong()
                     val range = exchange.requestHeaders.getFirst("Range")
                     val match = range?.let { Regex("bytes=(\\d+)-(\\d*)").matchEntire(it) }
                     val start = match?.groupValues?.get(1)?.toLongOrNull() ?: 0
@@ -70,19 +56,7 @@ internal class RecapMedia(private val text: String, audio: ByteArray, videoSourc
                         exchange.responseHeaders.set("Content-Length", length.toString())
                         exchange.sendResponseHeaders(if (range == null) 200 else 206, if (exchange.requestMethod == "HEAD") -1 else length)
                         if (exchange.requestMethod != "HEAD") {
-                            if (localVideo == null) exchange.responseBody.write(data!!, start.toInt(), length.toInt())
-                            else Files.newByteChannel(localVideo).use { channel ->
-                                channel.position(start)
-                                val buffer = ByteBuffer.allocate(64 * 1024)
-                                var remaining = length
-                                while (remaining > 0) {
-                                    buffer.clear(); buffer.limit(minOf(buffer.capacity().toLong(), remaining).toInt())
-                                    val count = channel.read(buffer)
-                                    if (count < 0) break
-                                    exchange.responseBody.write(buffer.array(), 0, count)
-                                    remaining -= count
-                                }
-                            }
+                            exchange.responseBody.write(data, start.toInt(), length.toInt())
                         }
                     }
                 }
@@ -93,9 +67,9 @@ internal class RecapMedia(private val text: String, audio: ByteArray, videoSourc
     override fun close() { server.stop(0); workers.shutdownNow() }
 }
 
-internal fun recapVideoHtml(text: String, video: String, autoPlay: Boolean = true): String {
+internal fun recapVideoHtml(text: String, autoPlay: Boolean = true): String {
     val template = RecapMedia::class.java.getResource("/browser/chat-recap.html")!!.readText()
     fun encoded(value: String) = Base64.getEncoder().encodeToString(value.toByteArray(Charsets.UTF_8))
-    return template.replace("/*RECAP_DATA*/", "{autoPlay:$autoPlay,text:decodeBase64('${encoded(text)}'),video:decodeBase64('${encoded(video)}')}")
+    return template.replace("/*RECAP_DATA*/", "{autoPlay:$autoPlay,text:decodeBase64('${encoded(text)}'),video:'background.mp4'}")
 }
 

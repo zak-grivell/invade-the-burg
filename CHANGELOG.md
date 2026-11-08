@@ -22,6 +22,7 @@
 - Keep blocked or cancelled playback from appearing as video-load failures.
 
 ### Changed
+- Bundle a looping excerpt of the original Prism Courier recording for recaps. Remove video URL/local-file configuration and the background video setting.
 - Route narration through the deployed Heroku service using its server-side ElevenLabs key; remove the local API key requirement.
 - Keep the open completed thread first on queue clicks and editor-pane switches while retaining drag reordering for waiting threads below it.
 - Drag completed-agent names to reorder the queue without opening a thread, with an insertion line and Escape cancellation.
