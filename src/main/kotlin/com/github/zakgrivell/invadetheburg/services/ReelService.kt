@@ -183,6 +183,9 @@ class ReelService(private val project: Project) : Disposable {
     }
 
     private fun suspendForNavigation(file: VirtualFile?) {
+        val pane = AirPaneActivity.read(file)
+        val currentEditor = FileEditorManager.getInstance(project).selectedEditor?.component
+        LOG.info("Reel Break: view changed: file=${viewFile != file}, thread=${viewThread != pane?.identity}, editor=${viewEditor !== currentEditor}, activity=${pane?.activity}")
         val hadBrowser = renderedTarget == "break" || renderedTarget == "recap"
         val epoch = ++viewEpoch
         browserView.viewChanged(AirPaneActivity.read(file)?.processing == true)
