@@ -34,3 +34,7 @@
 | 2026-11-08 | Codex | Codex/GPT | Move Back to Reels to the top right of chat, matching the break header switch button size and alignment. Add a placement/resizing regression test. | Requested by Zak; Kotlin tests, buildPlugin and verifyPluginStructure passed locally; human review pending. |
 
 | 2026-11-08 | Codex | Codex/GPT | Add built-in X, Instagram Reels, TikTok, LeetCode and Duolingo presets to settings, the website switcher and preview, preserving existing favourites. | Requested by Zak; 129 Kotlin tests, JS suites, build and structure checks passed; verified all presets and Duolingo URL selection in the IDE through computer use; human review pending. |
+
+| 2026-11-08 | Codex | Codex/GPT | Merge PRs #16 and #17 into main via GitHub and verify both merged. | Zak explicitly approved both merges. Build/unit checks passed; Windows native playback smoke tests failed during scroll handoff and remain unresolved. |
+
+| 2026-11-08 | Codex | Codex/GPT | Reorganize settings into labelled Website, Chat recaps and Break behaviour sections above Favourites, simplify sign-in/actions, and disable unused recap inputs. Add UI persistence/ordering tests. | Zak clarified that the large favourites list belongs below quick settings. 130 Kotlin tests, build and structure checks passed; visually checked the form and Never mode in IntelliJ. Human review pending. |

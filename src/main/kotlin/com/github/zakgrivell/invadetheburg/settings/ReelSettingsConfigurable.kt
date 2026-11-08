@@ -18,7 +18,8 @@ import javax.swing.JTable
 import javax.swing.JScrollPane
 import javax.swing.table.DefaultTableModel
 
-class ReelSettingsConfigurable : SearchableConfigurable {
+class ReelSettingsConfigurable(private val settingsProvider: () -> ReelSettings = { service<ReelSettings>() }) : SearchableConfigurable {
+    private var presetPicker: javax.swing.JComboBox<String>? = null
     private var recapMode: javax.swing.JComboBox<RecapMode>? = null
     private var videoSource: JBTextField? = null
     private var voiceId: JBTextField? = null
@@ -28,102 +29,130 @@ class ReelSettingsConfigurable : SearchableConfigurable {
     private var favoritesModel: DefaultTableModel? = null
     override fun getId() = "dev.reelbreak.settings"
     override fun getDisplayName() = "Reel Break"
-    override fun createComponent(): JComponent = JPanel(BorderLayout(0, 12)).apply {
-        val input = JBTextField(service<ReelSettings>().url)
-        urlField = input
-        val etaBox = JCheckBox("Use ETA to time breaks", service<ReelSettings>().useEtaToTimeBreaks).apply {
-            toolTipText = "Skip breaks for stretches predicted to end within seconds, show time left, and warn when the agent is wrapping up"
+    override fun createComponent(): JComponent {
+        val settings = settingsProvider()
+        val input = JBTextField(settings.url).also { urlField = it }
+        val presets = websitePresets()
+        val preset = javax.swing.JComboBox((listOf("Custom website") + presets.map { it.name }).toTypedArray())
+        presetPicker = preset
+        preset.selectedIndex = presets.indexOfFirst { it.url == settings.url } + 1
+        preset.addActionListener { if (preset.selectedIndex > 0) input.text = presets[preset.selectedIndex - 1].url }
+        fun signIn(parent: JComponent, url: String) {
+            try { ReelSetupDialog(parent, normalizeBreakUrl(url)).show() }
+            catch (error: IllegalArgumentException) { Messages.showErrorDialog(parent, error.message ?: "Invalid URL", "Reel Break Setup") }
         }
-        etaCheckBox = etaBox
-        add(JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            add(JPanel(BorderLayout(8, 0)).apply {
-            add(JBLabel("URL:"), BorderLayout.WEST)
-            add(input, BorderLayout.CENTER)
-            add(JButton("Setup").apply {
-                toolTipText = "Open this website to sign in and set up your account"
-                addActionListener {
-                    val url = try { normalizeBreakUrl(input.text) }
-                    catch (error: IllegalArgumentException) {
-                        Messages.showErrorDialog(input, error.message ?: "Invalid URL", "Reel Break Setup")
-                        return@addActionListener
-                    }
-                    ReelSetupDialog(input, url).show()
-                }
-            }, BorderLayout.EAST)
-            })
-            val presets = websitePresets()
-            add(JPanel(BorderLayout(8, 0)).apply {
-                add(JBLabel("Preset:"), BorderLayout.WEST)
-                add(javax.swing.JComboBox((listOf("Choose a preset…") + presets.map { it.name }).toTypedArray()).apply {
-                    addActionListener { if (selectedIndex > 0) input.text = presets[selectedIndex - 1].url }
-                }, BorderLayout.CENTER)
-            })
-            add(JPanel(BorderLayout()).apply { add(etaBox, BorderLayout.WEST) })
-        }, BorderLayout.NORTH)
+        val websiteForm = form().apply {
+            row("Preset:", preset)
+            row("Website URL:", JPanel(BorderLayout(8, 0)).apply {
+                add(input, BorderLayout.CENTER)
+                add(JButton("Sign in…").apply { addActionListener { signIn(input, input.text) } }, BorderLayout.EAST)
+            }, input)
+        }
         val model = object : DefaultTableModel(arrayOf("Name", "Website URL"), 0) {
             override fun getColumnClass(columnIndex: Int): Class<*> = String::class.java
         }
         favoritesModel = model
-        service<ReelSettings>().favorites.forEach { model.addRow(arrayOf(it.name, it.url)) }
+        settings.favorites.forEach { model.addRow(arrayOf(it.name, it.url)) }
         val table = JTable(model).apply {
             putClientProperty("terminateEditOnFocusLost", true)
             fillsViewportHeight = true
             selectionModel.selectionMode = javax.swing.ListSelectionModel.SINGLE_SELECTION
+            preferredScrollableViewportSize = java.awt.Dimension(440, rowHeight * 6)
         }
         favoritesTable = table
-        add(JPanel(BorderLayout(0, 8)).apply {
-            add(JBLabel("Favourites — choose these websites from the switcher during a break."), BorderLayout.NORTH)
+        val remove = JButton("Remove").apply {
+            isEnabled = false
+            addActionListener {
+                table.cellEditor?.stopCellEditing()
+                if (table.selectedRow >= 0) model.removeRow(table.selectedRow)
+            }
+        }
+        val signInSelected = JButton("Sign in…").apply {
+            isEnabled = false
+            addActionListener {
+                table.cellEditor?.stopCellEditing()
+                if (table.selectedRow >= 0) signIn(table, model.getValueAt(table.selectedRow, 1)?.toString().orEmpty())
+            }
+        }
+        table.selectionModel.addListSelectionListener {
+            remove.isEnabled = table.selectedRow >= 0
+            signInSelected.isEnabled = table.selectedRow >= 0
+        }
+        val favorites = JPanel(BorderLayout(0, 8)).apply {
+            border = javax.swing.BorderFactory.createTitledBorder("Favourites")
+            add(JBLabel("Presets are always available. Add your own websites here."), BorderLayout.NORTH)
             add(JScrollPane(table), BorderLayout.CENTER)
-            add(JPanel().apply {
-                add(JButton("Add").apply { addActionListener {
+            add(JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 0)).apply {
+                add(JButton("Add website").apply { addActionListener {
                     table.cellEditor?.stopCellEditing()
                     model.addRow(arrayOf("", "https://"))
-                    val row = model.rowCount - 1
-                    table.setRowSelectionInterval(row, row)
-                    table.editCellAt(row, 0)
+                    table.setRowSelectionInterval(model.rowCount - 1, model.rowCount - 1)
+                    table.editCellAt(model.rowCount - 1, 0)
                     table.editorComponent?.requestFocusInWindow()
                 } })
-                add(JButton("Remove").apply { addActionListener {
-                    table.cellEditor?.stopCellEditing()
-                    val row = table.selectedRow
-                    if (row >= 0) model.removeRow(row)
-                } })
-                add(JButton("Setup selected").apply { addActionListener {
-                    table.cellEditor?.stopCellEditing()
-                    val row = table.selectedRow
-                    if (row < 0) return@addActionListener
-                    val url = try { normalizeBreakUrl(model.getValueAt(row, 1)?.toString().orEmpty()) }
-                    catch (error: IllegalArgumentException) {
-                        Messages.showErrorDialog(table, error.message ?: "Invalid URL", "Reel Break Setup")
-                        return@addActionListener
-                    }
-                    ReelSetupDialog(table, url).show()
-                } })
-                add(JButton("Preview multiple agents").apply { addActionListener {
-                    MultiAgentPreviewDialog(table).show()
-                } })
+                add(remove)
+                add(signInSelected)
             }, BorderLayout.SOUTH)
-        }, BorderLayout.CENTER)
-        val footer = JPanel(java.awt.GridLayout(0, 1, 0, 6))
-        recapMode = javax.swing.JComboBox(RecapMode.entries.toTypedArray()).apply { selectedItem = service<ReelSettings>().recapMode }
-        voiceId = JBTextField(service<ReelSettings>().narrationVoiceId)
-        footer.add(JPanel(BorderLayout(8, 0)).apply {
-            add(JBLabel("Show chat recap:"), BorderLayout.WEST)
-            add(recapMode, BorderLayout.CENTER)
+        }
+        val mode = javax.swing.JComboBox(RecapMode.entries.toTypedArray()).also { recapMode = it; it.selectedItem = settings.recapMode }
+        val video = JBTextField(settings.recapVideoSource).also { videoSource = it }
+        val voice = JBTextField(settings.narrationVoiceId).also { voiceId = it }
+        val recapForm = form().apply {
+            row("Show recap:", mode)
+            row("", JBLabel("<html>Ask offers a recap after each turn. Always opens it automatically.<br>Never turns recaps off.</html>"))
+            row("Background video:", video)
+            row("", JBLabel("<html>A complete video URL or an absolute path to a local video.</html>"))
+            row("Voice ID:", voice)
+            row("", JBLabel("<html>Uses your ElevenLabs voice and API key.<br>Completed responses are sent to ElevenLabs for narration.</html>"))
+        }
+        fun updateRecapFields() {
+            val enabled = mode.selectedItem != RecapMode.NEVER
+            video.isEnabled = enabled
+            voice.isEnabled = enabled
+        }
+        mode.addActionListener { updateRecapFields() }
+        updateRecapFields()
+        val eta = JCheckBox("Use ETA to time breaks", settings.useEtaToTimeBreaks).also { etaCheckBox = it }
+        val behavior = form().apply {
+            row("", eta)
+            row("", JBLabel("<html>Skip very short waits and show an estimate during longer breaks.</html>"))
+            row("", JButton("Preview multiple agents…").apply { addActionListener { MultiAgentPreviewDialog(this).show() } })
+        }
+        fun page(content: JComponent): JComponent = JScrollPane(JPanel(BorderLayout()).apply {
+            border = javax.swing.BorderFactory.createEmptyBorder(16, 12, 16, 12)
+            add(content, BorderLayout.NORTH)
+        }).apply {
+            border = javax.swing.BorderFactory.createEmptyBorder()
+            horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+            verticalScrollBar.unitIncrement = 16
+        }
+        return JPanel(BorderLayout(0, 12)).apply {
+            val content = JPanel().apply {
+                layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                for ((title, section) in listOf("Website" to websiteForm, "Chat recaps" to recapForm, "Break behaviour" to behavior, "" to favorites)) {
+                    section.alignmentX = 0f
+                    if (title.isNotEmpty()) section.border = javax.swing.BorderFactory.createTitledBorder(title)
+                    section.maximumSize = java.awt.Dimension(Int.MAX_VALUE, section.preferredSize.height)
+                    add(section)
+                    add(javax.swing.Box.createVerticalStrut(12))
+                }
+            }
+            add(page(content), BorderLayout.CENTER)
+            add(JBLabel("Changes are saved when you click Apply or OK."), BorderLayout.SOUTH)
+        }
+    }
+
+    private fun form() = JPanel(java.awt.GridBagLayout())
+    private fun JPanel.row(text: String, control: JComponent, focus: JComponent = control) {
+        val y = componentCount / 2
+        add(JBLabel(text).apply { labelFor = focus }, java.awt.GridBagConstraints().apply {
+            gridx = 0; gridy = y; anchor = java.awt.GridBagConstraints.NORTHWEST
+            insets = java.awt.Insets(5, 0, 8, 12)
         })
-        videoSource = JBTextField(service<ReelSettings>().recapVideoSource)
-        footer.add(JPanel(BorderLayout(8, 0)).apply {
-            add(JBLabel("Recap video URL or file:"), BorderLayout.WEST)
-            add(videoSource, BorderLayout.CENTER)
+        add(control, java.awt.GridBagConstraints().apply {
+            gridx = 1; gridy = y; weightx = 1.0; fill = java.awt.GridBagConstraints.HORIZONTAL
+            anchor = java.awt.GridBagConstraints.NORTHWEST; insets = java.awt.Insets(0, 0, 8, 0)
         })
-        footer.add(JPanel(BorderLayout(8, 0)).apply {
-            add(JBLabel("Peter Griffin voice ID:"), BorderLayout.WEST)
-            add(voiceId, BorderLayout.CENTER)
-        })
-        footer.add(JBLabel("<html>Uses ELEVENLABS_API_KEY or ~/.config/reel-break/elevenlabs-key.<br>A short recap of the completed chat turn is sent to ElevenLabs for speech.</html>"))
-        add(footer, BorderLayout.SOUTH)
-        footer.add(JBLabel("<html>Edit favourite names and URLs in the table. Use complete HTTP or HTTPS addresses.<br>Setup opens a website so you can sign in. Apply or OK saves your changes.<br>Switching websites navigates the current browser; the previous page's position may be lost.</html>"))
     }
     override fun getPreferredFocusedComponent(): JComponent? = urlField
     private fun readFavorites(): List<FavoriteWebsite> {
@@ -134,16 +163,17 @@ class ReelSettingsConfigurable : SearchableConfigurable {
     }
     override fun isModified(): Boolean {
         if (urlField == null) return false
-        val settings = service<ReelSettings>()
+        val settings = settingsProvider()
         return etaCheckBox?.isSelected != settings.useEtaToTimeBreaks || videoSource?.text?.trim() != settings.recapVideoSource || recapMode?.selectedItem != settings.recapMode || voiceId?.text?.trim() != settings.narrationVoiceId || urlField?.text?.trim() != settings.url || readFavorites() != settings.favorites || favoritesTable?.isEditing == true
     }
     override fun reset() {
         favoritesTable?.cellEditor?.cancelCellEditing()
-        val settings = service<ReelSettings>()
+        val settings = settingsProvider()
         videoSource?.text = settings.recapVideoSource
         recapMode?.selectedItem = settings.recapMode
         voiceId?.text = settings.narrationVoiceId
         urlField?.text = settings.url
+        presetPicker?.selectedIndex = websitePresets().indexOfFirst { it.url == settings.url } + 1
         etaCheckBox?.isSelected = settings.useEtaToTimeBreaks
         favoritesModel?.let { model ->
             model.rowCount = 0
@@ -157,9 +187,9 @@ class ReelSettingsConfigurable : SearchableConfigurable {
             val url = normalizeBreakUrl(value)
             val favorites = normalizeFavorites(readFavorites())
             val video = com.github.zakgrivell.invadetheburg.ui.normalizeRecapVideo(videoSource?.text.orEmpty())
-            service<ReelSettings>().let { etaCheckBox?.let { box -> it.useEtaToTimeBreaks = box.isSelected }; it.recapVideoSource = video; it.url = url; it.favorites = favorites; it.recapMode = recapMode?.selectedItem as? RecapMode ?: RecapMode.ASK; it.narrationVoiceId = voiceId?.text.orEmpty() }
+            settingsProvider().let { etaCheckBox?.let { box -> it.useEtaToTimeBreaks = box.isSelected }; it.recapVideoSource = video; it.url = url; it.favorites = favorites; it.recapMode = recapMode?.selectedItem as? RecapMode ?: RecapMode.ASK; it.narrationVoiceId = voiceId?.text.orEmpty() }
         }
         catch (error: IllegalArgumentException) { throw ConfigurationException(error.message ?: "Invalid URL") }
     }
-    override fun disposeUIResources() { etaCheckBox = null; videoSource = null; recapMode = null; voiceId = null; urlField = null; favoritesTable = null; favoritesModel = null }
+    override fun disposeUIResources() { presetPicker = null; etaCheckBox = null; videoSource = null; recapMode = null; voiceId = null; urlField = null; favoritesTable = null; favoritesModel = null }
 }
