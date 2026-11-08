@@ -29,6 +29,7 @@ internal class SystemBreakPage(url: String, private val ownsPlaybackControls: Bo
     private val pendingScripts = mutableListOf<String>()
     private var requestedUrl = url
     private var initializing = false
+    private var preloading = true
     @Volatile private var active = false
     @Volatile private var disposed = false
 
@@ -64,10 +65,18 @@ internal class SystemBreakPage(url: String, private val ownsPlaybackControls: Bo
         view.addJavascriptCallback("reelBreakRecapFinished") {
             SwingUtilities.invokeLater { if (!disposed && ownsPlaybackControls) finished() }
         }
-        view.addJavascriptCallback("reelBreakRecapReady") { SwingUtilities.invokeLater { if (!disposed) ready = true } }
+        view.addJavascriptCallback("reelBreakRecapReady") { SwingUtilities.invokeLater { if (!disposed) { ready = true; preloading = false; pushVisibility() } } }
         // One-way document lifecycle notification; no page code awaits a Java Promise.
         view.addJavascriptCallback("reelBreakDocumentReady") {
-            SwingUtilities.invokeLater { if (!disposed) pushVisibility() }
+            SwingUtilities.invokeLater {
+                if (!disposed) {
+                    if (!ownsPlaybackControls && preloading) {
+                        Logger.getLogger(SystemBreakPage::class.java.name).info("Reel Break: retained browser document loaded")
+                        preloading = false
+                    }
+                    pushVisibility()
+                }
+            }
         }
         view.addJavascriptCallback("reelBreakPlaybackFailure") { details ->
             Logger.getLogger(SystemBreakPage::class.java.name).log(Level.INFO, "Break playback failure: {0}", details)
@@ -142,7 +151,7 @@ internal class SystemBreakPage(url: String, private val ownsPlaybackControls: Bo
     private fun pushVisibility() {
         browser?.let { view ->
             inputGate.setActive(view, active)
-            view.isVisible = active
+            view.isVisible = active || preloading
             if (!active && platform == BrowserPlatform.MAC) MacBrowserFocus.releaseHiddenBrowser(view) { !active && !disposed }
             view.eval(inputScript.replace("/*ACTIVE*/", active.toString()))
         }

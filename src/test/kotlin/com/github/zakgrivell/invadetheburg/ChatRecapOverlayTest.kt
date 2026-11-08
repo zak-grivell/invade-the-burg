@@ -24,7 +24,7 @@ class ChatRecapOverlayTest {
             var disposed = false
             val fake = object : BreakPage {
                 override fun onFinished(callback: () -> Unit) { finished = callback }
-                override val ready = false // A native browser must be mounted before it can load.
+                override var ready = false // A native browser must be mounted before it can load.
                 override val component = JPanel()
                 override fun loadUrl(url: String) {}
                 override fun setActive(value: Boolean) { active = value; if (value) activations++ }
@@ -33,6 +33,16 @@ class ChatRecapOverlayTest {
             val media = RecapMedia("Response", ByteArray(20))
             val overlay = ChatRecapOverlay(media, { completions++ }, { fake })
             try {
+                assertTrue(overlay.prepareOver(editor))
+                assertFalse(active)
+                assertTrue(root.layeredPane.getComponentsInLayer(JLayeredPane.MODAL_LAYER).single().bounds.maxX < 0)
+                overlay.showOver(editor)
+                overlay.hide()
+                assertFalse(active)
+                assertTrue("Navigating away during preload must leave no recap over chat",
+                    root.layeredPane.getComponentsInLayer(JLayeredPane.MODAL_LAYER).single().bounds.maxX < 0)
+                activations = 0
+                fake.ready = true
                 overlay.showOver(editor)
                 val views = root.layeredPane.getComponentsInLayer(JLayeredPane.MODAL_LAYER)
                 assertEquals("root=${editor.rootPane === root} showing=${editor.isShowing} visible=${editor.visibleRect} layer=${root.layeredPane.bounds} children=${root.layeredPane.components.map { it.javaClass.simpleName + ":" + root.layeredPane.getLayer(it) + ":" + it.bounds }} active=$active", 1, views.size)

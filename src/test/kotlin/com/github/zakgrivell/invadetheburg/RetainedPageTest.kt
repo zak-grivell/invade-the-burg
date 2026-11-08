@@ -7,6 +7,18 @@ import org.junit.Test
 import javax.swing.JPanel
 
 class RetainedPageTest {
+    @Test fun `startup preparation loads once without activating and first break reuses it`() {
+        val page = Page("https://example.com/")
+        var created = 0
+        val retained = RetainedPage { created++; page }
+        repeat(3) { assertSame(page, retained.prepare(page.location)) }
+        assertEquals(1, created)
+        assertTrue(page.visibility.isEmpty())
+        assertSame(page, retained.show(page.location))
+        assertEquals(listOf(true), page.visibility)
+        retained.dispose()
+        assertEquals(1, page.disposals)
+    }
     private class Page(var location: String) : BreakPage {
         override val component = JPanel()
         var loads = 0

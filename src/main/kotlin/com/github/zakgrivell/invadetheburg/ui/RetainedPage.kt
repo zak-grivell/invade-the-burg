@@ -17,14 +17,17 @@ internal class RetainedPage(private val create: (String) -> BreakPage) {
     private var configuredUrl: String? = null
     private var active = false
 
-    fun show(url: String): BreakPage {
+    fun prepare(url: String): BreakPage {
         val current = page ?: create(url).also { page = it; configuredUrl = url }
         if (configuredUrl != url) {
             current.loadUrl(url)
             configuredUrl = url
         }
-        if (!active) { active = true; current.setActive(true) }
         return current
+    }
+
+    fun show(url: String): BreakPage = prepare(url).also {
+        if (!active) { active = true; it.setActive(true) }
     }
 
     fun hide() {

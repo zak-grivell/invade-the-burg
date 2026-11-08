@@ -164,6 +164,9 @@ class ReelService(private val project: Project) : Disposable {
                     }
                 })
         }
+        val startupEditor = FileEditorManager.getInstance(project).selectedEditor?.component
+            ?: com.intellij.openapi.wm.WindowManager.getInstance().getFrame(project)?.rootPane?.contentPane as? javax.swing.JComponent
+        overlay.prepare(startupEditor, service<ReelSettings>().url)
         timer.start(); startEtaHistory(); pollPane()
     }
     fun resumeScrolling() {
@@ -183,6 +186,9 @@ class ReelService(private val project: Project) : Disposable {
     }
 
     private fun suspendForNavigation(file: VirtualFile?) {
+        val pane = AirPaneActivity.read(file)
+        val currentEditor = FileEditorManager.getInstance(project).selectedEditor?.component
+        LOG.info("Reel Break: view changed: file=${viewFile != file}, thread=${viewThread != pane?.identity}, editor=${viewEditor !== currentEditor}, activity=${pane?.activity}")
         val hadBrowser = renderedTarget == "break" || renderedTarget == "recap"
         val epoch = ++viewEpoch
         browserView.viewChanged(AirPaneActivity.read(file)?.processing == true)
@@ -290,6 +296,7 @@ class ReelService(private val project: Project) : Disposable {
         val showBreak = allowedByView && (state.update(pane) || pane?.processing != true) && (view?.action != EtaAction.SKIP_BREAK || pane?.processing != true)
         val always = service<ReelSettings>().recapMode == RecapMode.ALWAYS
         val selectedRecap = recapViews[selectedFile]
+        if (editor != null) selectedRecap?.prepareOver(editor)
         val waiting = always && pane?.completed == true && selectedFile !in failedRecaps &&
             (pendingRecaps.containsKey(pane.identity) || requestedTurns.containsKey(selectedFile)) &&
             selectedRecap == null
@@ -299,16 +306,15 @@ class ReelService(private val project: Project) : Disposable {
         if (completing) finishingIdentity = pane.identity
         else if (!overlay.isFinishing) finishingIdentity = null
         // Preparing narration never reveals chat between the break and an Always recap.
-        val keepBreak = waiting && overlay.isVisible
-        if (keepBreak) overlay.pauseMedia()
+        val recapReady = selectedRecap?.ready == true
+        val keepBreak = (waiting || (selectedRecap != null && !recapReady)) && overlay.isVisible
         val target = when {
             showBreak || keepBreak -> "break"
             completing -> "completion"
-            selectedRecap != null -> "recap"
+            recapReady -> "recap"
             else -> "chat"
         }
         if (target == "break") updateQueueVisibility(target, pane, editor)
-        if (target != "break") overlay.pauseMedia()
         val epoch = viewEpoch
         val key: Any = if (target == "chat") "chat" else Triple(selectedFile, target, if (target == "recap") selectedRecap else null)
         transition.show(key, editor) {

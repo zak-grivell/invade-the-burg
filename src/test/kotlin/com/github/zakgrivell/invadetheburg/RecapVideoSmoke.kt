@@ -29,7 +29,7 @@ object RecapVideoSmoke {
                 overlay = ChatRecapOverlay(media, { completed = true; overlay.hide() }, { url ->
                     SystemBreakPage(url, ownsPlaybackControls = true).also { page = it }
                 })
-                transition.show("recap", editor) { overlay.showOver(editor) }
+                overlay.prepareOver(editor)
             }
             var loaded = false
             repeat(20) {
@@ -39,6 +39,11 @@ object RecapVideoSmoke {
                 }
             }
             check(loaded) { "Recap voice/page did not load" }
+            check(eval("return voice.paused && video.paused ? 1 : 0;") == "1")
+            check(overlay.ready) { "Recap readiness was not delivered while hidden" }
+            println("PASS: hidden recap preloads both media tracks without playback")
+            SwingUtilities.invokeAndWait { transition.show("recap", editor) { overlay.showOver(editor) } }
+            Thread.sleep(300)
             check(eval("const r=document.querySelector('.reel').getBoundingClientRect(); return Math.abs(r.width/r.height-9/16)<0.01 ? 1 : 0;") == "1")
             check(eval("return getComputedStyle(document.body).backgroundColor === 'rgb(0, 0, 0)' ? 1 : 0;") == "1")
             println("PASS: native recap mounts in the real layered overlay after the fade")
