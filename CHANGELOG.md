@@ -20,6 +20,7 @@
 - Keep blocked or cancelled playback from appearing as video-load failures.
 
 ### Changed
+- Drag completed-agent names to reorder the queue without opening a thread, with an insertion line and Escape cancellation.
 - Simplify the completed-agent queue to clickable, current-highlighted rows with per-row remove crosses. Clicking promotes a thread; submitting its next prompt advances automatically. Remove duplicate queue headers and the action toolbar.
 - Added native Retry video, Reload page, and Open in browser recovery controls for website breaks; recap controls remain separate.
 - Removed unused template test fixtures and replaced template documentation with project setup instructions.

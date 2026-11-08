@@ -72,6 +72,7 @@ class ReelService(private val project: Project) : Disposable {
     }
     fun reviewCompleted(id: String) { openQueued(completedQueue.review(id)); publishQueue(); pollPane() }
     fun removeCompleted(id: String) { openQueued(completedQueue.remove(id, selectedThread())); publishQueue(); pollPane() }
+    fun reorderCompleted(id: String, targetId: String, after: Boolean) { completedQueue.reorder(id, targetId, after); publishQueue() }
     private val narrator = ChatNarrator(project)
     private val recapViews = mutableMapOf<VirtualFile, ChatRecapOverlay>()
     private val recapOffers = mutableMapOf<VirtualFile, Notification>()

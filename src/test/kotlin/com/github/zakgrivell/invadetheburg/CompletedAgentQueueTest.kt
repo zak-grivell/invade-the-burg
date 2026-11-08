@@ -109,6 +109,25 @@ class CompletedAgentQueueTest {
         q.observe(listOf(pane("a", "READY")), "a", 1000)
         assertTrue(q.entries.single().partial)
     }
+    @Test fun `drag reorder preserves durations and handoff order across polling and arrivals`() {
+        val q = completed()
+        val a = q.entries.first(); val b = q.entries.last()
+        q.reorder(b.id, a.id, false)
+        assertEquals(listOf(b, a), q.entries)
+        q.observe(listOf(pane("a", "READY"), pane("b", "READY"), pane("c", "PROCESSING")), "a", 3000)
+        q.observe(listOf(pane("a", "READY"), pane("b", "READY"), pane("c", "READY")), "a", 4000)
+        val c = q.entries.last()
+        q.reorder(b.id, c.id, true)
+        assertEquals(listOf(a, c, b), q.entries)
+        q.reorder(c.id, c.id, false)
+        q.reorder("stale", a.id, false)
+        q.reorder(a.id, "stale", true)
+        assertEquals(listOf(a, c, b), q.entries)
+        assertEquals("c", q.observe(listOf(pane("a", "PROCESSING"), pane("b", "READY"), pane("c", "READY")), "a", 5000))
+        assertEquals(listOf(c, b), q.entries)
+        q.reorder(a.id, b.id, false) // The dragged completion was acknowledged during the drag.
+        assertEquals(listOf(c, b), q.entries)
+    }
     @Test fun `cross on current completion advances while background cross retains the current thread`() {
         val q = completed()
         assertEquals("b", q.remove(q.entries.first().id, "a"))

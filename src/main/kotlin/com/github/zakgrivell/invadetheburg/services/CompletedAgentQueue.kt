@@ -48,6 +48,15 @@ internal class CompletedAgentQueue {
         pending.add(0, entry)
         return entry.thread
     }
+    /** Anchor to a live completion, so a stale drop cannot reorder a later prompt on that thread. */
+    fun reorder(id: String, targetId: String, after: Boolean) {
+        if (id == targetId) return
+        val entry = pending.find { it.id == id } ?: return
+        if (pending.none { it.id == targetId }) return
+        pending.remove(entry)
+        val target = pending.indexOfFirst { it.id == targetId }
+        pending.add(target + if (after) 1 else 0, entry)
+    }
     fun remove(id: String, selected: String?): String? {
         val entry = pending.find { it.id == id } ?: return null
         pending.remove(entry)
