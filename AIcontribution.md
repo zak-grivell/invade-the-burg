@@ -30,3 +30,5 @@
 | 2026-11-07 | Lane A (Claude) | Claude Code (Sonnet 5.5) | Fix Windows-only CI failure in `SessionHistoryTest` startup summary: expected paths now built from `Path` objects instead of hardcoded `/` separators; both found and not-found cases assert the full string. | Reviewed by Sean: approved; test now platform-independent without weakening the checks. |
 
 | 2026-11-08 | Codex | Codex/GPT | Merge latest main into feature/nice-animations, reconcile ETA timing/badges/settings with recaps and playback recovery, validate the combined branch, and open a PR. | Requested by Zak; 126 Kotlin tests, both JS suites, buildPlugin and verifyPluginStructure passed locally; human review pending. |
+
+| 2026-11-08 | Codex | Codex/GPT | Move Back to Reels to the top right of chat, matching the break header switch button size and alignment. Add a placement/resizing regression test. | Requested by Zak; Kotlin tests, buildPlugin and verifyPluginStructure passed locally; human review pending. |
