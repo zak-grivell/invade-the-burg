@@ -42,6 +42,15 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         toolTipText = "Return to your break while the agent is working"
         addActionListener { resume() }
     }
+    private val workButton = JButton("Back to work").apply { addActionListener { dismiss() } }
+    init {
+        val size = java.awt.Dimension(
+            maxOf(returnButton.preferredSize.width, workButton.preferredSize.width),
+            maxOf(returnButton.preferredSize.height, workButton.preferredSize.height)
+        )
+        returnButton.preferredSize = size
+        workButton.preferredSize = size
+    }
     private var completionStarted = 0L
     val isFinishing: Boolean get() = popupPanel.isVisible &&
         (System.nanoTime() - completionStarted) / 1_000_000 < COMPLETION_HOLD_MS
@@ -136,7 +145,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
                         add(JPanel().apply {
                             add(websiteSwitcher)
                             add(JButton("Settings").apply { addActionListener { settings() } })
-                            add(JButton("Back to work").apply { addActionListener { dismiss() } })
+                            add(workButton)
                         }, BorderLayout.EAST)
                     }, BorderLayout.NORTH)
                     // The native browser below is a heavyweight component that would hide anything drawn over it,
@@ -205,8 +214,9 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
             nextLayer.add(returnButton, JLayeredPane.PALETTE_LAYER, 0)
         }
         returnButton.setBounds(
-            visible.x + (visible.width - size.width - 12).coerceAtLeast(0),
-            visible.y + (visible.height - size.height - 12).coerceAtLeast(0),
+            visible.x + (visible.width - size.width - 5).coerceAtLeast(0),
+            visible.y + (5 + (maxOf(size.height, websiteSwitcher.preferredSize.height) - size.height) / 2)
+                .coerceAtMost(visible.height - size.height),
             size.width, size.height
         )
         returnButton.isVisible = true
