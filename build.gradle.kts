@@ -1,10 +1,35 @@
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import java.io.File
+import java.util.Properties
 
 plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.intellij.platform")
     id("org.jetbrains.changelog")
 }
+
+// Auto-increment version on each build (only once, at task execution time)
+val baseProps = Properties().apply {
+    File("gradle.properties").inputStream().use { load(it) }
+}
+val baseVersion = baseProps.getProperty("version", "1.0.0")
+val parts = baseVersion.split(".")
+val computedNewVersion = "${parts[0]}.${parts[1]}.${parts[2].toInt() + 1}"
+
+// Increment version as the very first step of any build
+tasks.register("incrementVersion") {
+    doLast {
+        val vf = File("gradle.properties")
+        val p = Properties().apply { vf.inputStream().use { load(it) } }
+        val current = p.getProperty("version", baseVersion)
+        if (current == baseVersion) {
+            p.setProperty("version", computedNewVersion)
+            vf.outputStream().use { p.store(it, null) }
+        }
+    }
+}
+tasks.named("initializeIntellijPlatformPlugin").configure { dependsOn("incrementVersion") }
+tasks.named("build").configure { dependsOn("buildPlugin") }
 
 val mediaSmokeRuntime = configurations.create("mediaSmokeRuntime")
 dependencies {
@@ -23,12 +48,23 @@ dependencies {
 
 intellijPlatform {
     pluginConfiguration {
-        version = "1.2.3"
+        version = baseVersion
         ideaVersion { sinceBuild = "263"; untilBuild = "263.*" }
     }
 }
 
 kotlin { jvmToolchain(25) }
+
+// Generate reelbreak.properties with the version for the overlay to read
+tasks.processResources {
+    doLast {
+        val propsFile = File(destinationDirectory.get().asFile, "reelbreak.properties")
+        propsFile.parentFile?.mkdirs()
+        val p = Properties()
+        p.setProperty("version", baseVersion)
+        propsFile.outputStream().use { p.store(it, "Auto-generated — do not edit") }
+    }
+}
 
 // Opt-in integration check of the actual OS browser and decoder, outside the IDE process.
 tasks.register<JavaExec>("smokeTestMedia") {
@@ -37,6 +73,16 @@ tasks.register<JavaExec>("smokeTestMedia") {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath + mediaSmokeRuntime
     mainClass = "com.github.zakgrivell.invadetheburg.NativeMediaSmoke"
+    systemProperty("java.awt.headless", "false")
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+}
+
+tasks.register<JavaExec>("smokeTestRecapVideo") {
+    group = "verification"
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath + sourceSets.test.get().compileClasspath + mediaSmokeRuntime
+    mainClass = "com.github.zakgrivell.invadetheburg.RecapVideoSmoke"
+    providers.gradleProperty("recapSmokeVideo").orNull?.let { args(it) }
     systemProperty("java.awt.headless", "false")
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }

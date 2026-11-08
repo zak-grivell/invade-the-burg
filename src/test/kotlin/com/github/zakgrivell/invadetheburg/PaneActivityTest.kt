@@ -20,6 +20,7 @@ class PaneActivityTest {
         assertEquals(PaneActivity("existing-codex-session", true, "PROCESSING"), AirPaneActivity.readKnownPane(FakePane(Activity.PROCESSING)))
         Activity.entries.filter { it != Activity.PROCESSING }.forEach {
             assertEquals(PaneActivity("existing-codex-session", false, it.name), AirPaneActivity.readKnownPane(FakePane(it)))
+            assertEquals(it in setOf(Activity.READY, Activity.UNREAD), AirPaneActivity.readKnownPane(FakePane(it))?.completed)
         }
     }
     @Test fun `unrelated and incompatible panes close the break`() {

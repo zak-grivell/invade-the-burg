@@ -14,8 +14,12 @@ import javax.swing.JTextArea
 import javax.swing.SwingUtilities
 
 /** Retains the native browser and pushes visibility on lifecycle events, never on a JS timer. */
-internal class SystemBreakPage(url: String, private val platform: BrowserPlatform = BrowserPlatform.current()
+internal class SystemBreakPage(url: String, private val ownsPlaybackControls: Boolean = false, private val platform: BrowserPlatform = BrowserPlatform.current()
     ?: error("Supported operating systems: Windows, macOS, and Linux.")) : BreakPage {
+    override var ready: Boolean = !ownsPlaybackControls
+        private set
+    private var finished: () -> Unit = {}
+    override fun onFinished(callback: () -> Unit) { finished = callback }
     private var browser: WebViewComponent? = null
     private val container = JPanel(BorderLayout())
     private val mediaScript = javaClass.getResource("/browser/media-visibility.js")!!.readText()
@@ -45,6 +49,19 @@ internal class SystemBreakPage(url: String, private val platform: BrowserPlatfor
     private fun createBrowser() {
         val view = WebViewComponent.create(platform.mode)
         browser = view
+        view.addJavascriptCallback("reelBreakRecapRequestPlayback") {
+            SwingUtilities.invokeLater {
+                if (!disposed && active && ownsPlaybackControls && browser === view) {
+                    // WKWebView's native evaluateJavaScript call supplies a gesture context.
+                    // play() must run synchronously inside it, not in a timer/RAF continuation.
+                    view.eval("if (window.__reelBreakStartRecapFromHost) window.__reelBreakStartRecapFromHost();")
+                }
+            }
+        }
+        view.addJavascriptCallback("reelBreakRecapFinished") {
+            SwingUtilities.invokeLater { if (!disposed && ownsPlaybackControls) finished() }
+        }
+        view.addJavascriptCallback("reelBreakRecapReady") { SwingUtilities.invokeLater { if (!disposed) ready = true } }
         // One-way document lifecycle notification; no page code awaits a Java Promise.
         view.addJavascriptCallback("reelBreakDocumentReady") {
             SwingUtilities.invokeLater { if (!disposed) pushVisibility() }
@@ -54,14 +71,16 @@ internal class SystemBreakPage(url: String, private val platform: BrowserPlatfor
         }
         view.addOnBeforeLoad("""
             (function () {
-                ${mediaScript.replace("/*HIDDEN*/", "document.hidden")}
+                window.__reelBreakOwnPlaybackControls = $ownsPlaybackControls;
+                window.__reelBreakPaneActive = false;
+                ${if (ownsPlaybackControls) "" else mediaScript.replace("/*HIDDEN*/", "true")}
                 const ready = function () {
                     try { if (typeof window.reelBreakDocumentReady === 'function') window.reelBreakDocumentReady(''); } catch (_) {}
                 };
                 document.addEventListener('DOMContentLoaded', ready, {once: true});
                 window.addEventListener('pageshow', ready);
                 document.addEventListener('visibilitychange', function () {
-                    if (document.hidden) { ${mediaScript.replace("/*HIDDEN*/", "true")} }
+                    if (document.hidden) { ${if (ownsPlaybackControls) "" else mediaScript.replace("/*HIDDEN*/", "true")} }
                     ready();
                 });
                 ready();
@@ -72,9 +91,16 @@ internal class SystemBreakPage(url: String, private val platform: BrowserPlatfor
         view.setUrl(requestedUrl)
         container.removeAll()
         container.add(view, BorderLayout.CENTER)
-        container.add(JButton("Play / Retry visible video").apply {
-            toolTipText = "Resume a video if the website or browser blocked playback"
-            addActionListener { if (active) view.eval("if (window.__reelBreakRetryMedia) window.__reelBreakRetryMedia(true);") }
+        if (!ownsPlaybackControls) container.add(JPanel(java.awt.FlowLayout(java.awt.FlowLayout.RIGHT)).apply {
+            add(JButton("Retry video").apply {
+                toolTipText = "Retry the visible video, using another declared format when available"
+                addActionListener { view.eval("if (window.__reelBreakRetryMedia) window.__reelBreakRetryMedia(true);") }
+            })
+            add(JButton("Reload page").apply { addActionListener { view.setUrl(requestedUrl) } })
+            add(JButton("Open in browser").apply {
+                toolTipText = "Use your default browser if this embedded browser cannot decode a video"
+                addActionListener { com.intellij.ide.BrowserUtil.browse(requestedUrl) }
+            })
         }, BorderLayout.SOUTH)
         container.revalidate()
         container.repaint()
@@ -82,6 +108,7 @@ internal class SystemBreakPage(url: String, private val platform: BrowserPlatfor
     }
 
     private fun showError(failure: Throwable) {
+        ready = true
         val cause = (failure as? java.util.concurrent.CompletionException)?.cause ?: failure
         Logger.getLogger(SystemBreakPage::class.java.name).log(Level.WARNING, "Native break browser initialization failed", cause)
         try { browser?.dispose() } catch (cleanup: Exception) { cause.addSuppressed(cleanup) }
@@ -108,7 +135,11 @@ internal class SystemBreakPage(url: String, private val platform: BrowserPlatfor
     }
     override fun setActive(active: Boolean) { this.active = active; if (!disposed) pushVisibility() }
     private fun pushVisibility() {
-        browser?.eval(mediaScript.replace("/*HIDDEN*/", (!active).toString()))
+        if (ownsPlaybackControls) {
+            // The recap owns paired playback. Generic retained-media resume could start
+            // either track before the selected pane is revealed, or race a first seek.
+            browser?.eval("window.__reelBreakPaneActive = $active; if (window.__reelBreakActivateRecap) window.__reelBreakActivateRecap($active);")
+        } else browser?.eval(mediaScript.replace("/*HIDDEN*/", (!active).toString()))
     }
     override fun dispose() {
         disposed = true

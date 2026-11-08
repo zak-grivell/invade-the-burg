@@ -8,6 +8,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ReelSettingsTest {
+    @org.junit.Test fun `recaps default to ask and preserve selected mode`() {
+        val settings = com.github.zakgrivell.invadetheburg.settings.ReelSettings()
+        org.junit.Assert.assertEquals(com.github.zakgrivell.invadetheburg.settings.RecapMode.ASK, settings.recapMode)
+        com.github.zakgrivell.invadetheburg.settings.RecapMode.entries.forEach { mode ->
+            settings.recapMode = mode
+            settings.useEtaToTimeBreaks = false
+            val restored = com.github.zakgrivell.invadetheburg.settings.ReelSettings()
+            restored.loadState(settings.state)
+            org.junit.Assert.assertEquals(mode, restored.recapMode)
+            assertFalse("ETA preference must survive alongside recap mode", restored.useEtaToTimeBreaks)
+        }
+    }
+
     @Test fun `favorites persist with names and normalized URLs including empty lists`() {
         val settings = ReelSettings()
         settings.favorites = listOf(FavoriteWebsite(" Challenges ", " https://leetcode.com/problemset/ "))

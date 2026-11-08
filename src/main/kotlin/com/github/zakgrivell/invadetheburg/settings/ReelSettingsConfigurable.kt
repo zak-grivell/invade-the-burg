@@ -19,6 +19,9 @@ import javax.swing.JScrollPane
 import javax.swing.table.DefaultTableModel
 
 class ReelSettingsConfigurable : SearchableConfigurable {
+    private var recapMode: javax.swing.JComboBox<RecapMode>? = null
+    private var videoSource: JBTextField? = null
+    private var voiceId: JBTextField? = null
     private var urlField: JBTextField? = null
     private var etaCheckBox: JCheckBox? = null
     private var favoritesTable: JTable? = null
@@ -95,7 +98,25 @@ class ReelSettingsConfigurable : SearchableConfigurable {
                 } })
             }, BorderLayout.SOUTH)
         }, BorderLayout.CENTER)
-        add(JBLabel("<html>Edit favourite names and URLs in the table. Use complete HTTP or HTTPS addresses.<br>Setup opens a website so you can sign in. Apply or OK saves your changes.<br>Switching websites navigates the current browser; the previous page's position may be lost.</html>"), BorderLayout.SOUTH)
+        val footer = JPanel(java.awt.GridLayout(0, 1, 0, 6))
+        recapMode = javax.swing.JComboBox(RecapMode.entries.toTypedArray()).apply { selectedItem = service<ReelSettings>().recapMode }
+        voiceId = JBTextField(service<ReelSettings>().narrationVoiceId)
+        footer.add(JPanel(BorderLayout(8, 0)).apply {
+            add(JBLabel("Show chat recap:"), BorderLayout.WEST)
+            add(recapMode, BorderLayout.CENTER)
+        })
+        videoSource = JBTextField(service<ReelSettings>().recapVideoSource)
+        footer.add(JPanel(BorderLayout(8, 0)).apply {
+            add(JBLabel("Recap video URL or file:"), BorderLayout.WEST)
+            add(videoSource, BorderLayout.CENTER)
+        })
+        footer.add(JPanel(BorderLayout(8, 0)).apply {
+            add(JBLabel("Peter Griffin voice ID:"), BorderLayout.WEST)
+            add(voiceId, BorderLayout.CENTER)
+        })
+        footer.add(JBLabel("<html>Uses ELEVENLABS_API_KEY or ~/.config/reel-break/elevenlabs-key.<br>A short recap of the completed chat turn is sent to ElevenLabs for speech.</html>"))
+        add(footer, BorderLayout.SOUTH)
+        footer.add(JBLabel("<html>Edit favourite names and URLs in the table. Use complete HTTP or HTTPS addresses.<br>Setup opens a website so you can sign in. Apply or OK saves your changes.<br>Switching websites navigates the current browser; the previous page's position may be lost.</html>"))
     }
     override fun getPreferredFocusedComponent(): JComponent? = urlField
     private fun readFavorites(): List<FavoriteWebsite> {
@@ -107,11 +128,14 @@ class ReelSettingsConfigurable : SearchableConfigurable {
     override fun isModified(): Boolean {
         if (urlField == null) return false
         val settings = service<ReelSettings>()
-        return urlField?.text?.trim() != settings.url || etaCheckBox?.isSelected != settings.useEtaToTimeBreaks || readFavorites() != settings.favorites || favoritesTable?.isEditing == true
+        return etaCheckBox?.isSelected != settings.useEtaToTimeBreaks || videoSource?.text?.trim() != settings.recapVideoSource || recapMode?.selectedItem != settings.recapMode || voiceId?.text?.trim() != settings.narrationVoiceId || urlField?.text?.trim() != settings.url || readFavorites() != settings.favorites || favoritesTable?.isEditing == true
     }
     override fun reset() {
         favoritesTable?.cellEditor?.cancelCellEditing()
         val settings = service<ReelSettings>()
+        videoSource?.text = settings.recapVideoSource
+        recapMode?.selectedItem = settings.recapMode
+        voiceId?.text = settings.narrationVoiceId
         urlField?.text = settings.url
         etaCheckBox?.isSelected = settings.useEtaToTimeBreaks
         favoritesModel?.let { model ->
@@ -125,12 +149,10 @@ class ReelSettingsConfigurable : SearchableConfigurable {
         try {
             val url = normalizeBreakUrl(value)
             val favorites = normalizeFavorites(readFavorites())
-            service<ReelSettings>().let {
-                it.url = url; it.favorites = favorites
-                etaCheckBox?.let { box -> it.useEtaToTimeBreaks = box.isSelected }
-            }
+            val video = com.github.zakgrivell.invadetheburg.ui.normalizeRecapVideo(videoSource?.text.orEmpty())
+            service<ReelSettings>().let { etaCheckBox?.let { box -> it.useEtaToTimeBreaks = box.isSelected }; it.recapVideoSource = video; it.url = url; it.favorites = favorites; it.recapMode = recapMode?.selectedItem as? RecapMode ?: RecapMode.ASK; it.narrationVoiceId = voiceId?.text.orEmpty() }
         }
         catch (error: IllegalArgumentException) { throw ConfigurationException(error.message ?: "Invalid URL") }
     }
-    override fun disposeUIResources() { urlField = null; etaCheckBox = null; favoritesTable = null; favoritesModel = null }
+    override fun disposeUIResources() { etaCheckBox = null; videoSource = null; recapMode = null; voiceId = null; urlField = null; favoritesTable = null; favoritesModel = null }
 }

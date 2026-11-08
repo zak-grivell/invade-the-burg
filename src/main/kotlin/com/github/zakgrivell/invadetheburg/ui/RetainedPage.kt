@@ -3,7 +3,9 @@ package com.github.zakgrivell.invadetheburg.ui
 import javax.swing.JComponent
 
 internal interface BreakPage {
+    val ready: Boolean get() = true
     val component: JComponent
+    fun onFinished(callback: () -> Unit) {}
     fun loadUrl(url: String)
     fun setActive(active: Boolean)
     fun dispose()

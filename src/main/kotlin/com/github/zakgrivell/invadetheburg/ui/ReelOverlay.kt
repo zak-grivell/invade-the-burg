@@ -7,11 +7,13 @@ import com.github.zakgrivell.invadetheburg.settings.ReelSettings
 import com.github.zakgrivell.invadetheburg.settings.FavoriteWebsite
 import java.awt.BorderLayout
 import java.awt.Color
+import java.awt.Font
 import java.awt.FlowLayout
 import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.RenderingHints
 import java.awt.Rectangle
+import java.util.Properties
 import javax.swing.JButton
 import javax.swing.JComboBox
 import javax.swing.DefaultComboBoxModel
@@ -23,11 +25,33 @@ import javax.swing.SwingUtilities
 
 /** Hides the overlay in place so native browser peers keep their document and history. */
 internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: () -> Unit, private val settings: () -> Unit) : Disposable {
+    companion object {
+        private val version: String = try {
+            val props = Properties()
+            ReelOverlay::class.java.classLoader.getResourceAsStream("reelbreak.properties")?.use { props.load(it) }
+            props.getProperty("version", "unknown")
+        } catch (_: Throwable) {
+            "unknown"
+        }
+    }
+
     private var layer: JLayeredPane? = null
     private var returnLayer: JLayeredPane? = null
+    private var popupLayer: JLayeredPane? = null
     private val returnButton = JButton("Back to Reels").apply {
         toolTipText = "Return to your break while the agent is working"
         addActionListener { resume() }
+    }
+    private var completionStarted = 0L
+    val isFinishing: Boolean get() = popupPanel.isVisible &&
+        (System.nanoTime() - completionStarted) / 1_000_000 < COMPLETION_HOLD_MS
+    val isVisible: Boolean get() = view?.isVisible == true
+    private val popupPanel = JPanel(java.awt.GridBagLayout()).apply {
+        background = javax.swing.UIManager.getColor("Panel.background") ?: Color.DARK_GRAY
+        add(JBLabel("All done! Returning to chat…").apply {
+            font = font.deriveFont(Font.BOLD, 24f)
+            border = javax.swing.BorderFactory.createEmptyBorder(20, 40, 20, 40)
+        })
     }
     private var view: JPanel? = null
     private val etaBadge = EtaBadge()
@@ -94,6 +118,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
     }
 
     fun showOver(editor: JComponent, url: String): Boolean {
+        cancelCompletion()
         hideReturnButton()
         val root = SwingUtilities.getRootPane(editor) ?: return false
         if (!editor.isShowing) return false
@@ -107,7 +132,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
             view = JPanel(BorderLayout()).apply {
                 add(JPanel(BorderLayout()).apply {
                     add(JPanel(BorderLayout()).apply {
-                        add(JBLabel("  Reel Break · hides when your agent finishes"), BorderLayout.CENTER)
+                        add(JBLabel("  Reel Break · v$version"), BorderLayout.CENTER)
                         add(JPanel().apply {
                             add(websiteSwitcher)
                             add(JButton("Settings").apply { addActionListener { settings() } })
@@ -125,7 +150,8 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
             layer?.remove(view)
             layer?.repaint()
             layer = nextLayer
-            nextLayer.add(view, JLayeredPane.PALETTE_LAYER)
+            // Use the constraints overload: Kotlin otherwise selects add(Component, index).
+            nextLayer.add(view, JLayeredPane.PALETTE_LAYER, 0)
         }
         if (view!!.bounds != visible) {
             view!!.bounds = visible
@@ -134,6 +160,35 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         }
         view!!.isVisible = true
         return true
+    }
+
+    /** A Swing completion card avoids trying to alpha-composite the native browser peer. */
+    fun finishOver(editor: JComponent) {
+        val root = SwingUtilities.getRootPane(editor) ?: return hide()
+        if (!editor.isShowing) return hide()
+        val nextLayer = root.layeredPane
+        val bounds = SwingUtilities.convertRectangle(editor, editor.visibleRect, nextLayer)
+            .intersection(Rectangle(0, 0, nextLayer.width, nextLayer.height))
+        if (bounds.isEmpty) return hide()
+        if (popupLayer !== nextLayer) {
+            popupLayer?.remove(popupPanel)
+            popupLayer?.repaint()
+            popupLayer = nextLayer
+            nextLayer.add(popupPanel, JLayeredPane.POPUP_LAYER, 0)
+        }
+        popupPanel.bounds = bounds
+        if (!popupPanel.isVisible) completionStarted = System.nanoTime()
+        popupPanel.isVisible = true
+        page.hide()
+        view?.isVisible = false
+        hideReturnButton()
+        nextLayer.revalidate()
+        nextLayer.repaint()
+    }
+
+    private fun cancelCompletion() {
+        popupPanel.isVisible = false
+        popupLayer?.repaint()
     }
 
     fun showReturnButton(editor: JComponent) {
@@ -147,7 +202,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
             returnLayer?.remove(returnButton)
             returnLayer?.repaint()
             returnLayer = nextLayer
-            nextLayer.add(returnButton, JLayeredPane.PALETTE_LAYER)
+            nextLayer.add(returnButton, JLayeredPane.PALETTE_LAYER, 0)
         }
         returnButton.setBounds(
             visible.x + (visible.width - size.width - 12).coerceAtLeast(0),
@@ -161,8 +216,11 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         returnButton.isVisible = false
     }
 
+    fun pauseMedia() { page.hide() }
+
     fun hide() {
         hideReturnButton()
+        cancelCompletion()
         page.hide()
         if (view?.isVisible != true) return
         view?.isVisible = false
@@ -176,6 +234,9 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         returnLayer?.remove(returnButton)
         returnLayer?.repaint()
         returnLayer = null
+        popupLayer?.remove(popupPanel)
+        popupLayer?.repaint()
+        popupLayer = null
         view?.let { layer?.remove(it) }
         layer?.revalidate()
         layer?.repaint()
