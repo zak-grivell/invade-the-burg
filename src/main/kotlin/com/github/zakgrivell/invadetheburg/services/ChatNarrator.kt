@@ -31,6 +31,16 @@ internal class CompletionTracker {
     fun retain(identities: Set<String>) { running.retainAll(identities) }
 }
 
+internal fun narrationRequest(voice: String, text: String): HttpRequest {
+    check(voice.matches(Regex("[A-Za-z0-9_-]+"))) { "Set your Peter Griffin ElevenLabs voice ID in Settings > Tools > Reel Break." }
+    return HttpRequest.newBuilder(URI("https://hack-the-burg-elevenlabs-eec39ae58d6f.herokuapp.com/v1/text-to-speech/$voice?output_format=pcm_24000"))
+        .timeout(Duration.ofSeconds(45)).header("Content-Type", "application/json")
+        .POST(HttpRequest.BodyPublishers.ofString(Gson().toJson(mapOf(
+            "text" to text, "model_id" to "eleven_multilingual_v2",
+            "voice_settings" to mapOf("stability" to 0.4, "similarity_boost" to 0.8, "style" to 0.5, "speed" to 1.12)
+        )))).build()
+}
+
 internal class ChatNarrator(private val project: Project) : Disposable {
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "Reel Break narrator").apply { isDaemon = true } }
     @Volatile private var closed = false
@@ -48,23 +58,15 @@ internal class ChatNarrator(private val project: Project) : Disposable {
                 val voice = configuredVoice.ifBlank {
                     System.getenv("ELEVENLABS_VOICE_ID") ?: readConfig("elevenlabs-voice-id")
                 }.trim()
-                check(voice.matches(Regex("[A-Za-z0-9_-]+"))) { "Set your Peter Griffin ElevenLabs voice ID in Settings > Tools > Reel Break." }
-                val key = System.getenv("ELEVENLABS_API_KEY") ?: readConfig("elevenlabs-key")
-                check(key.isNotBlank()) { "Configure an ElevenLabs API key in ELEVENLABS_API_KEY or ~/.config/reel-break/elevenlabs-key." }
                 val text = chatRecap(turn)
                 if (closed) return@submit
                 val audio = ByteArrayOutputStream()
                 val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
                 for (chunk in speechChunks(text)) {
                 if (closed || service<ReelSettings>().recapMode == RecapMode.NEVER) return@submit
-                val request = HttpRequest.newBuilder(URI("https://api.elevenlabs.io/v1/text-to-speech/$voice?output_format=pcm_24000"))
-                    .timeout(Duration.ofSeconds(45)).header("xi-api-key", key).header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(Gson().toJson(mapOf(
-                        "text" to chunk, "model_id" to "eleven_multilingual_v2",
-                        "voice_settings" to mapOf("stability" to 0.4, "similarity_boost" to 0.8, "style" to 0.5, "speed" to 1.12)
-                    )))).build()
+                val request = narrationRequest(voice, chunk)
                 val response = client.send(request, HttpResponse.BodyHandlers.ofByteArray())
-                check(response.statusCode() == 200) { "ElevenLabs returned HTTP ${response.statusCode()}. Check your API key, voice access and credit balance." }
+                check(response.statusCode() == 200) { "Narration proxy returned HTTP ${response.statusCode()}. Check your voice access or the proxy's ElevenLabs key and credit balance." }
                 audio.write(response.body())
                 }
                 if (!closed) {

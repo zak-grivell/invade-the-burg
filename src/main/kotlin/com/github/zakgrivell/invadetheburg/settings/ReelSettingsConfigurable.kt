@@ -114,7 +114,7 @@ class ReelSettingsConfigurable : SearchableConfigurable {
             add(JBLabel("Peter Griffin voice ID:"), BorderLayout.WEST)
             add(voiceId, BorderLayout.CENTER)
         })
-        footer.add(JBLabel("<html>Uses ELEVENLABS_API_KEY or ~/.config/reel-break/elevenlabs-key.<br>A short recap of the completed chat turn is sent to ElevenLabs for speech.</html>"))
+        footer.add(JBLabel("<html>No API key setup needed.<br>The completed agent response is sent through the hosted narration proxy to ElevenLabs for speech.</html>"))
         add(footer, BorderLayout.SOUTH)
         footer.add(JBLabel("<html>Edit favourite names and URLs in the table. Use complete HTTP or HTTPS addresses.<br>Setup opens a website so you can sign in. Apply or OK saves your changes.<br>Switching websites navigates the current browser; the previous page's position may be lost.</html>"))
     }
