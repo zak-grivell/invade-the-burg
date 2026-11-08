@@ -94,11 +94,13 @@ class ReelSettingsConfigurable(private val settingsProvider: () -> ReelSettings 
             }, BorderLayout.SOUTH)
         }
         val mode = javax.swing.JComboBox(RecapMode.entries.toTypedArray()).also { recapMode = it; it.selectedItem = settings.recapMode }
-        val voice = JBTextField(settings.narrationVoiceId).also { voiceId = it }
+        val voice = JBTextField(settings.narrationVoiceId).apply {
+            toolTipText = "ElevenLabs voice ID used to read summaries"
+        }.also { voiceId = it }
         val recapForm = form().apply {
             row("Show recap:", mode)
             row("", JBLabel("<html>Ask offers a recap after each turn. Always opens it automatically.<br>Never turns recaps off.</html>"))
-            row("Voice ID:", voice)
+            row("Summary voice:", voice)
             row("", JBLabel("<html>Uses the hosted narration service; no local API key is needed.<br>Completed responses are sent through the service to ElevenLabs.</html>"))
         }
         fun updateRecapFields() {

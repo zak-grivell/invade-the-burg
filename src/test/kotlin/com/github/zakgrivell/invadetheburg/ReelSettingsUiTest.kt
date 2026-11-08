@@ -28,7 +28,7 @@ class ReelSettingsUiTest {
                 assertEquals("https://www.duolingo.com/learn", field("Website URL:").text)
                 assertTrue(ui.isModified)
                 mode.selectedItem = RecapMode.NEVER
-                assertFalse(field("Voice ID:").isEnabled)
+                assertFalse(field("Summary voice:").isEnabled)
                 assertTrue("Bundled gameplay has no source field", controls.filterIsInstance<JLabel>().none { it.text == "Background video:" })
                 ui.apply()
                 assertEquals(RecapMode.NEVER, saved.recapMode)
