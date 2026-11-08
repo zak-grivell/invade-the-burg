@@ -1,6 +1,7 @@
 package com.github.zakgrivell.invadetheburg
 
 import com.github.zakgrivell.invadetheburg.services.CompletedAgent
+import com.github.zakgrivell.invadetheburg.services.tags.AgentTag
 import com.github.zakgrivell.invadetheburg.ui.CompletedAgentsPanel
 import org.junit.Assert.*
 import org.junit.Test
@@ -38,6 +39,26 @@ class CompletedAgentsPanelTest {
             assertTrue(buttons().none { it.text.startsWith("Agent B") })
             panel.update(emptyList())
             assertTrue(buttons().isEmpty())
+        }
+    }
+    @Test fun `tagged rows show the tag label and the question as tooltip, untagged rows are unchanged`() {
+        SwingUtilities.invokeAndWait {
+            val panel = CompletedAgentsPanel({}, {}, { _, _, _ -> })
+            val a = CompletedAgent("a:1", "a", "Agent A", 62000, false)
+            val b = CompletedAgent("b:1", "b", "Agent B", 3000, false)
+            fun open(name: String) = all(panel).filterIsInstance<JButton>().single { it.text.startsWith(name) }
+            panel.update(listOf(a, b), "a")
+            val untaggedText = open("Agent B").text
+            val untaggedTip = open("Agent B").toolTipText
+            panel.update(listOf(a, b), "a", mapOf("b" to AgentTag("taste", "Illustration or plain text?")))
+            assertEquals("Agent B  ·  3s  [TASTE]", open("Agent B").text)
+            assertTrue(open("Agent B").toolTipText.startsWith("Agent needs you: TASTE: Illustration or plain text?"))
+            assertTrue(open("Agent B").toolTipText.endsWith(untaggedTip))
+            assertEquals("Agent A  ·  1m 2s  (Current)", open("Agent A").text)
+            // Clearing the tag (agent resumed) restores the untagged row exactly.
+            panel.update(listOf(a, b), "a")
+            assertEquals(untaggedText, open("Agent B").text)
+            assertEquals(untaggedTip, open("Agent B").toolTipText)
         }
     }
     private fun layout(component: Container) {

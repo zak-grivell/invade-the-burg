@@ -25,6 +25,11 @@ import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.util.text.StringUtil
+import com.github.zakgrivell.invadetheburg.services.tags.AgentTag
+import com.github.zakgrivell.invadetheburg.services.tags.AgentTagParser
+import com.github.zakgrivell.invadetheburg.services.tags.DEFAULT_AGENT_TAGS
+import com.github.zakgrivell.invadetheburg.services.tags.agentTagMessage
 
 private val LOG = logger<ReelService>()
 
@@ -51,17 +56,20 @@ class ReelService(private val project: Project) : Disposable {
     internal fun onQueueChanged(listener: (QueueView) -> Unit): () -> Unit {
         completedQueue.pinActive(selectedThread())
         queueListeners.add(listener)
-        listener(QueueView(completedQueue.entries, selectedThread()))
+        listener(QueueView(completedQueue.entries, selectedThread(), agentTags.toMap()))
         return { queueListeners.remove(listener) }
     }
+    private var publishedTags = emptyMap<String, AgentTag>()
     private fun publishQueue() {
         val activeThread = selectedThread()
         completedQueue.pinActive(activeThread)
         val entries = completedQueue.entries
-        if (entries == publishedQueue && activeThread == publishedActiveThread) return
+        val tags = agentTags.toMap()
+        if (entries == publishedQueue && activeThread == publishedActiveThread && tags == publishedTags) return
         publishedActiveThread = activeThread
         publishedQueue = entries
-        queueListeners.toList().forEach { it(QueueView(entries, activeThread)) }
+        publishedTags = tags
+        queueListeners.toList().forEach { it(QueueView(entries, activeThread, tags)) }
     }
     private fun selectedFile(): VirtualFile? = com.intellij.openapi.fileEditor.ex.FileEditorManagerEx.getInstanceEx(project).currentWindow?.selectedFile
         ?: FileEditorManager.getInstance(project).selectedFiles.firstOrNull()
@@ -135,6 +143,44 @@ class ReelService(private val project: Project) : Disposable {
         }
     }
     private data class PendingRecap(val previousTurn: String?, val readyAt: Long, var failure: Throwable? = null)
+    /** Latest valid agent tag per thread; cleared when that thread resumes processing. */
+    private val agentTags = mutableMapOf<String, AgentTag>()
+    private val tagBalloons = mutableMapOf<String, Notification>()
+
+    private fun clearAgentTag(thread: String) {
+        agentTags.remove(thread)
+        tagBalloons.remove(thread)?.expire()
+    }
+
+    /** Untagged turns change nothing, so behaviour without a valid tag is exactly as before. */
+    private fun announceAgentTag(file: VirtualFile, thread: String, turn: ChatTurn) {
+        runCatching {
+            LOG.info("ReelBreak tags: snapshot hook reached thread=$thread turn=${turn.id}")
+            val text = turn.responses.lastOrNull().orEmpty()
+            LOG.info("ReelBreak tags: last response length=${text.length} containsMarker=${text.contains("[[TAG:", ignoreCase = true)}")
+            val tag = AgentTagParser.parse(text, AgentTagParser.parseTagList(DEFAULT_AGENT_TAGS))
+            LOG.info("ReelBreak tags: parse result=${tag ?: "untagged"}")
+            if (tag == null) {
+                LOG.info("ReelBreak tags: balloon skipped thread=$thread reason=no valid tag")
+                return
+            }
+            clearAgentTag(thread)
+            agentTags[thread] = tag
+            val balloon = NotificationGroupManager.getInstance().getNotificationGroup("Reel Break Narration")
+                .createNotification(file.presentableName, StringUtil.escapeXmlEntities(agentTagMessage(tag)), NotificationType.INFORMATION)
+            balloon.addAction(NotificationAction.createSimpleExpiring("Open chat") { tagBalloons.remove(thread); openTaggedChat(thread) })
+            tagBalloons[thread] = balloon
+            balloon.notify(project)
+            LOG.info("ReelBreak tags: balloon shown thread=$thread tag=${tag.name}")
+            publishQueue()
+        }.onFailure { LOG.warn("Reel Break: could not show agent tag", it) }
+    }
+
+    /** Same path as clicking the thread's queue row; falls back to just focusing its pane. */
+    private fun openTaggedChat(thread: String) {
+        val queued = completedQueue.entries.firstOrNull { it.thread == thread }
+        if (queued != null) reviewCompleted(queued.id) else { openQueued(thread); pollPane() }
+    }
     private val processingTurns = mutableMapOf<String, String?>()
     private val pendingRecaps = mutableMapOf<String, PendingRecap>()
     private val timer = Timer(200) { pollPane() }
@@ -175,7 +221,9 @@ class ReelService(private val project: Project) : Disposable {
         state.dismiss()
         val file = selectedFile()
         if (file != null && AirPaneActivity.read(file)?.completed == true) {
-            AirPaneActivity.read(file)?.identity?.let { pendingRecaps.remove(it) }
+            AirPaneActivity.read(file)?.identity?.let {
+                if (pendingRecaps.remove(it) != null) LOG.info("ReelBreak tags: balloon skipped thread=$it reason=dismissed before transcript was read")
+            }
             clearRecap(file)
             failedRecaps.add(file)
         }
@@ -247,6 +295,7 @@ class ReelService(private val project: Project) : Disposable {
         completions.retain(identities)
         processingTurns.keys.retainAll(identities)
         pendingRecaps.keys.retainAll(identities)
+        (agentTags.keys + tagBalloons.keys).filter { it !in identities }.forEach(::clearAgentTag)
         val now = System.nanoTime()
         val completedIdentities = mutableSetOf<String>()
         panes.forEach { (file, activity) ->
@@ -256,11 +305,13 @@ class ReelService(private val project: Project) : Disposable {
             if (activity.processing) {
                 if (latestTurns.containsKey(file)) clearRecap(file)
                 pendingRecaps.remove(activity.identity)
+                clearAgentTag(activity.identity)
                 if (!processingTurns.containsKey(activity.identity)) processingTurns[activity.identity] = turn()?.id
             }
             if (completions.update(activity)) {
                 completedIdentities.add(activity.identity)
                 pendingRecaps[activity.identity] = PendingRecap(processingTurns[activity.identity], now)
+                LOG.info("ReelBreak tags: completion detected thread=${activity.identity} selected=${file == selectedFile()}, waiting for transcript")
             }
             if (!activity.processing) processingTurns.remove(activity.identity)
             pendingRecaps[activity.identity]?.let { pending ->
@@ -270,9 +321,16 @@ class ReelService(private val project: Project) : Disposable {
                     val snapshot = turn()
                     if (snapshot != null && snapshot.id != pending.previousTurn) {
                         pendingRecaps.remove(activity.identity)
+                        announceAgentTag(file, activity.identity, snapshot)
                         offerRecap(file, snapshot)
                     } else if (elapsedMs >= 5_000) {
                         pendingRecaps.remove(activity.identity)
+                        LOG.info("ReelBreak tags: balloon skipped thread=${activity.identity} reason=" +
+                            when {
+                                pending.failure != null -> "transcript read failed (${pending.failure})"
+                                snapshot == null -> "no Air native chat transcript after 5s (terminal-surface session?)"
+                                else -> "transcript still shows the previous turn after 5s"
+                            })
                         pending.failure?.let { Logger.getInstance(ReelService::class.java).warn("Could not read Air transcript for completed turn", it) }
                         failedRecaps.add(file)
                         narrator.unavailable()
@@ -363,6 +421,7 @@ class ReelService(private val project: Project) : Disposable {
         val cleanup = {
             transition.dispose()
             (recapViews.keys + recapOffers.keys).toSet().forEach(::clearRecap)
+            tagBalloons.keys.toList().forEach(::clearAgentTag)
             retiredRecaps.forEach { it.dispose() }
             retiredRecaps.clear()
             overlay.dispose()

@@ -96,3 +96,15 @@ The queue is project-local and lasts for the IDE session. Completions seen in th
 Sending the final queued thread's next prompt, or removing the last completion with its cross, reopens Reels automatically. This also overrides an ETA skip for that run. Empty startup queues and background activity do not trigger this handoff, and a draft, permission request or regular code pane stays visible.
 
 The completed-agent sidebar is visible only alongside chat and recap playback. It stays hidden while browsing Reels, even if a background agent finishes. The sidebar contains only thread rows and their remove crosses. Starting a new prompt still returns you to chat when that prompt finishes. Switching editor tabs, split panes, or threads immediately suspends the old browser and cancels its pending fade. A newly selected working thread stays in chat until Resume, while a new prompt started from a draft may open its normal break. Hidden browsers disable focus/input and ignore page keyboard events; navigation returns focus to the selected editor's input.
+
+## Agent tags
+
+A coding agent can say *why* it needs you. When the last response of a completed turn contains a marker `[[TAG:<name>]] <one-line question>`, Reel Break shows an IDE balloon "Agent needs you: TASTE: <question>" with an **Open chat** action, and the **Completed agents** row gets a `[TASTE]` label with the question as its tooltip. Supported tags are `blocked`, `direction`, `taste` and `review` (case-insensitive, currently fixed). If there are several markers, the last one wins; unknown or malformed markers are ignored, and untagged completions behave exactly as before. The tag clears when that agent starts working again. All tags currently get the same handling; pull-back timing is unchanged.
+
+Paste this line into your own project's `AGENTS.md`:
+
+```
+When you need a human decision, end your message with [[TAG:blocked|direction|taste|review]] followed by a one-line question.
+```
+
+Tags are read from Air's native chat view; terminal-surface sessions are not supported yet (planned: read the agent's own transcript). Diagnostics are logged to `idea.log` with the prefix `ReelBreak tags:`.
