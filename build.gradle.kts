@@ -71,7 +71,8 @@ tasks.register<JavaExec>("smokeTestMedia") {
     group = "verification"
     description = "Verify native H.264 playback and page retention using a local test video"
     dependsOn(tasks.testClasses)
-    classpath = sourceSets.test.get().runtimeClasspath + mediaSmokeRuntime
+    // Browser focus integration uses platform classes supplied by the IDE in production.
+    classpath = sourceSets.test.get().runtimeClasspath + sourceSets.test.get().compileClasspath + mediaSmokeRuntime
     mainClass = "com.github.zakgrivell.invadetheburg.NativeMediaSmoke"
     systemProperty("java.awt.headless", "false")
     jvmArgs("--enable-native-access=ALL-UNNAMED")
