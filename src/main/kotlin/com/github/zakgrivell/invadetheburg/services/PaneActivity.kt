@@ -1,6 +1,9 @@
 package com.github.zakgrivell.invadetheburg.services
 
-internal data class PaneActivity(val identity: String, val processing: Boolean, val completed: Boolean = false)
+/** [activity] carries Air's raw activity enum name so richer state can be derived without re-reading the pane. */
+internal data class PaneActivity(val identity: String, val processing: Boolean, val activity: String? = null) {
+    val completed: Boolean get() = activity == "READY" || activity == "UNREAD"
+}
 
 /** Reads Air's actual pane state without linking the plugin to Air's private module classes. */
 internal object AirPaneActivity {
@@ -15,7 +18,7 @@ internal object AirPaneActivity {
         val identity = file.javaClass.getMethod("getThreadIdentity").invoke(file) as? String
         val activity = file.javaClass.getMethod("getThreadActivity").invoke(file) as? Enum<*>
         if (identity.isNullOrEmpty() || activity == null) null
-        else PaneActivity(identity, activity.name == "PROCESSING", activity.name in setOf("READY", "UNREAD"))
+        else PaneActivity(identity, activity.name == "PROCESSING", activity.name)
     } catch (_: ReflectiveOperationException) {
         // An incompatible Air update must close Reels, never leave a stale break running.
         null

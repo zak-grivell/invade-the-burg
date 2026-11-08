@@ -13,9 +13,11 @@ class ReelSettingsTest {
         org.junit.Assert.assertEquals(com.github.zakgrivell.invadetheburg.settings.RecapMode.ASK, settings.recapMode)
         com.github.zakgrivell.invadetheburg.settings.RecapMode.entries.forEach { mode ->
             settings.recapMode = mode
+            settings.useEtaToTimeBreaks = false
             val restored = com.github.zakgrivell.invadetheburg.settings.ReelSettings()
             restored.loadState(settings.state)
             org.junit.Assert.assertEquals(mode, restored.recapMode)
+            assertFalse("ETA preference must survive alongside recap mode", restored.useEtaToTimeBreaks)
         }
     }
 
@@ -76,5 +78,20 @@ class ReelSettingsTest {
         val settings = ReelSettings()
         settings.loadState(ReelSettings.Options().apply { url = "invalid" })
         assertEquals(DEFAULT_BREAK_URL, settings.url)
+    }
+    @Test fun `ETA break timing defaults on, persists, and old state without the field stays on`() {
+        val settings = ReelSettings()
+        assertTrue(settings.useEtaToTimeBreaks)
+        settings.useEtaToTimeBreaks = false
+        val restored = ReelSettings()
+        restored.loadState(settings.state)
+        assertFalse(restored.useEtaToTimeBreaks)
+        restored.useEtaToTimeBreaks = true
+        val again = ReelSettings()
+        again.loadState(restored.state)
+        assertTrue(again.useEtaToTimeBreaks)
+        val old = ReelSettings()
+        old.loadState(ReelSettings.Options())
+        assertTrue(old.useEtaToTimeBreaks)
     }
 }

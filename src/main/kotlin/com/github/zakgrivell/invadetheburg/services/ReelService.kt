@@ -11,6 +11,10 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.github.zakgrivell.invadetheburg.ui.PaneTransition
 import com.github.zakgrivell.invadetheburg.ui.ReelOverlay
+import com.github.zakgrivell.invadetheburg.services.eta.EtaAction
+import com.github.zakgrivell.invadetheburg.services.eta.EtaMonitor
+import com.github.zakgrivell.invadetheburg.services.eta.EtaView
+import com.intellij.openapi.diagnostic.logger
 import javax.swing.Timer
 import com.github.zakgrivell.invadetheburg.settings.RecapMode
 import com.github.zakgrivell.invadetheburg.ui.ChatRecapOverlay
@@ -21,6 +25,8 @@ import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.diagnostic.Logger
+
+private val LOG = logger<ReelService>()
 
 @Service(Service.Level.PROJECT)
 class ReelService(private val project: Project) : Disposable {
@@ -78,13 +84,19 @@ class ReelService(private val project: Project) : Disposable {
     private val timer = Timer(200) { pollPane() }
     private val overlay = ReelOverlay(
         dismiss = { dismiss() },
-        resume = { state.resume(); pollPane() },
+        resume = { state.resume(); etaGuard { eta?.forceBreak() }; pollPane() },
         settings = { ShowSettingsUtil.getInstance().showSettingsDialog(project, ReelSettingsConfigurable::class.java) }
     )
     private var disposed = false
     private var finishingIdentity: String? = null
 
-    fun start() { if (!disposed && !timer.isRunning) { timer.start(); pollPane() } }
+    // Read-only ETA tracking and logging; it must never stop the overlay from working.
+    private val eta: EtaMonitor? = runCatching { EtaMonitor.createDefault() }
+        .onFailure { LOG.warn("Reel Break: ETA tracking unavailable", it) }.getOrNull()
+    private var etaFailureLogged = false
+    private var etaHistoryRequested = false
+
+    fun start() { if (!disposed && !timer.isRunning) { timer.start(); startEtaHistory(); pollPane() } }
     fun dismiss() {
         state.dismiss()
         val file = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()
@@ -143,7 +155,10 @@ class ReelService(private val project: Project) : Disposable {
         val selectedFile = manager.selectedFiles.firstOrNull()
         val pane = AirPaneActivity.read(selectedFile)
         val editor = manager.selectedEditor?.component
-        val showBreak = state.update(pane)
+        eta?.let { monitor -> etaGuard { monitor.observe(pane, System.currentTimeMillis()) } }
+        val view = etaView()
+        overlay.setEtaBadge(view?.badge)
+        val showBreak = state.update(pane) && view?.action != EtaAction.SKIP_BREAK
         val always = service<ReelSettings>().recapMode == RecapMode.ALWAYS
         val selectedRecap = recapViews[selectedFile]
         val waiting = always && pane?.completed == true && selectedFile !in failedRecaps &&
@@ -179,10 +194,33 @@ class ReelService(private val project: Project) : Disposable {
         }
     }
 
+    /** Null means "behave exactly as without ETA": the setting is off, ETA is unavailable, or it failed. */
+    private fun etaView(): EtaView? {
+        val monitor = eta ?: return null
+        if (!service<ReelSettings>().useEtaToTimeBreaks) return null
+        return runCatching { monitor.evaluate(System.currentTimeMillis(), overlay.isShowing) }
+            .onFailure { logEtaFailureOnce(it) }.getOrNull()
+    }
+
+    private fun startEtaHistory() {
+        if (etaHistoryRequested) return
+        etaHistoryRequested = true
+        eta?.let { monitor -> etaGuard { monitor.loadHistoryInBackground() } }
+    }
+
+    private fun etaGuard(block: () -> Unit) {
+        runCatching(block).onFailure { logEtaFailureOnce(it) }
+    }
+
+    private fun logEtaFailureOnce(failure: Throwable) {
+        if (!etaFailureLogged) { etaFailureLogged = true; LOG.warn("Reel Break: ETA tracking failed", failure) }
+    }
+
     override fun dispose() {
         disposed = true
         timer.stop()
         narrator.dispose()
+        eta?.let { monitor -> etaGuard { monitor.close(System.currentTimeMillis()) } }
         val application = ApplicationManager.getApplication()
         val cleanup = {
             transition.dispose()

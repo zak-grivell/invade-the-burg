@@ -9,6 +9,8 @@ import com.github.zakgrivell.invadetheburg.ui.MultiAgentPreviewDialog
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
 import java.awt.BorderLayout
+import javax.swing.BoxLayout
+import javax.swing.JCheckBox
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.JButton
@@ -21,6 +23,7 @@ class ReelSettingsConfigurable : SearchableConfigurable {
     private var videoSource: JBTextField? = null
     private var voiceId: JBTextField? = null
     private var urlField: JBTextField? = null
+    private var etaCheckBox: JCheckBox? = null
     private var favoritesTable: JTable? = null
     private var favoritesModel: DefaultTableModel? = null
     override fun getId() = "dev.reelbreak.settings"
@@ -28,7 +31,13 @@ class ReelSettingsConfigurable : SearchableConfigurable {
     override fun createComponent(): JComponent = JPanel(BorderLayout(0, 12)).apply {
         val input = JBTextField(service<ReelSettings>().url)
         urlField = input
-        add(JPanel(BorderLayout(8, 0)).apply {
+        val etaBox = JCheckBox("Use ETA to time breaks", service<ReelSettings>().useEtaToTimeBreaks).apply {
+            toolTipText = "Skip breaks for stretches predicted to end within seconds, show time left, and warn when the agent is wrapping up"
+        }
+        etaCheckBox = etaBox
+        add(JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            add(JPanel(BorderLayout(8, 0)).apply {
             add(JBLabel("URL:"), BorderLayout.WEST)
             add(input, BorderLayout.CENTER)
             add(JButton("Setup").apply {
@@ -42,6 +51,8 @@ class ReelSettingsConfigurable : SearchableConfigurable {
                     ReelSetupDialog(input, url).show()
                 }
             }, BorderLayout.EAST)
+            })
+            add(JPanel(BorderLayout()).apply { add(etaBox, BorderLayout.WEST) })
         }, BorderLayout.NORTH)
         val model = object : DefaultTableModel(arrayOf("Name", "Website URL"), 0) {
             override fun getColumnClass(columnIndex: Int): Class<*> = String::class.java
@@ -117,7 +128,7 @@ class ReelSettingsConfigurable : SearchableConfigurable {
     override fun isModified(): Boolean {
         if (urlField == null) return false
         val settings = service<ReelSettings>()
-        return videoSource?.text?.trim() != settings.recapVideoSource || recapMode?.selectedItem != settings.recapMode || voiceId?.text?.trim() != settings.narrationVoiceId || urlField?.text?.trim() != settings.url || readFavorites() != settings.favorites || favoritesTable?.isEditing == true
+        return etaCheckBox?.isSelected != settings.useEtaToTimeBreaks || videoSource?.text?.trim() != settings.recapVideoSource || recapMode?.selectedItem != settings.recapMode || voiceId?.text?.trim() != settings.narrationVoiceId || urlField?.text?.trim() != settings.url || readFavorites() != settings.favorites || favoritesTable?.isEditing == true
     }
     override fun reset() {
         favoritesTable?.cellEditor?.cancelCellEditing()
@@ -126,6 +137,7 @@ class ReelSettingsConfigurable : SearchableConfigurable {
         recapMode?.selectedItem = settings.recapMode
         voiceId?.text = settings.narrationVoiceId
         urlField?.text = settings.url
+        etaCheckBox?.isSelected = settings.useEtaToTimeBreaks
         favoritesModel?.let { model ->
             model.rowCount = 0
             settings.favorites.forEach { model.addRow(arrayOf(it.name, it.url)) }
@@ -138,9 +150,9 @@ class ReelSettingsConfigurable : SearchableConfigurable {
             val url = normalizeBreakUrl(value)
             val favorites = normalizeFavorites(readFavorites())
             val video = com.github.zakgrivell.invadetheburg.ui.normalizeRecapVideo(videoSource?.text.orEmpty())
-            service<ReelSettings>().let { it.recapVideoSource = video; it.url = url; it.favorites = favorites; it.recapMode = recapMode?.selectedItem as? RecapMode ?: RecapMode.ASK; it.narrationVoiceId = voiceId?.text.orEmpty() }
+            service<ReelSettings>().let { etaCheckBox?.let { box -> it.useEtaToTimeBreaks = box.isSelected }; it.recapVideoSource = video; it.url = url; it.favorites = favorites; it.recapMode = recapMode?.selectedItem as? RecapMode ?: RecapMode.ASK; it.narrationVoiceId = voiceId?.text.orEmpty() }
         }
         catch (error: IllegalArgumentException) { throw ConfigurationException(error.message ?: "Invalid URL") }
     }
-    override fun disposeUIResources() { videoSource = null; recapMode = null; voiceId = null; urlField = null; favoritesTable = null; favoritesModel = null }
+    override fun disposeUIResources() { etaCheckBox = null; videoSource = null; recapMode = null; voiceId = null; urlField = null; favoritesTable = null; favoritesModel = null }
 }

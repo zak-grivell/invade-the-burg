@@ -46,6 +46,7 @@ class ReelSettings : PersistentStateComponent<ReelSettings.Options> {
         var narrationVoiceId: String = ""
         var url: String = DEFAULT_BREAK_URL
         var favorites: MutableList<FavoriteWebsite> = mutableListOf(FavoriteWebsite("Instagram Reels", DEFAULT_BREAK_URL))
+        var useEtaToTimeBreaks: Boolean = true
     }
     private var options = Options()
     var recapVideoSource: String
@@ -65,6 +66,10 @@ class ReelSettings : PersistentStateComponent<ReelSettings.Options> {
     var url: String
         get() = options.url
         set(value) { options.url = normalizeBreakUrl(value) }
+    /** When off, breaks behave exactly as before ETA existed: no skipping, no hint, no badge. */
+    var useEtaToTimeBreaks: Boolean
+        get() = options.useEtaToTimeBreaks
+        set(value) { options.useEtaToTimeBreaks = value }
     var favorites: List<FavoriteWebsite>
         get() = options.favorites.map { it.copy() }
         set(value) { options.favorites = normalizeFavorites(value).toMutableList() }
@@ -74,6 +79,7 @@ class ReelSettings : PersistentStateComponent<ReelSettings.Options> {
             recapVideoSource = state.recapVideoSource.ifBlank { DEFAULT_RECAP_VIDEO }
             recapMode = state.recapMode
             narrationVoiceId = state.narrationVoiceId.trim()
+            useEtaToTimeBreaks = state.useEtaToTimeBreaks
             url = runCatching { normalizeBreakUrl(state.url) }.getOrDefault(DEFAULT_BREAK_URL)
             favorites = state.favorites.mapNotNull {
                 runCatching { normalizeFavorites(listOf(it)).single() }.getOrNull()
