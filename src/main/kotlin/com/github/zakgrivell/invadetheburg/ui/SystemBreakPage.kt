@@ -25,6 +25,7 @@ internal class SystemBreakPage(url: String, private val ownsPlaybackControls: Bo
     private val mediaScript = javaClass.getResource("/browser/media-visibility.js")!!.readText()
     private val inputScript = javaClass.getResource("/browser/input-visibility.js")!!.readText()
     private val inputGate = BrowserInputGate()
+    private val adBlockScript = javaClass.getResource("/browser/ad-block.js")!!.readText()
     private val pendingScripts = mutableListOf<String>()
     private var requestedUrl = url
     private var initializing = false
@@ -71,6 +72,7 @@ internal class SystemBreakPage(url: String, private val ownsPlaybackControls: Bo
         view.addJavascriptCallback("reelBreakPlaybackFailure") { details ->
             Logger.getLogger(SystemBreakPage::class.java.name).log(Level.INFO, "Break playback failure: {0}", details)
         }
+        view.addOnBeforeLoad(adBlockScript)
         view.addOnBeforeLoad("""
             (function () {
                 ${inputScript.replace("/*ACTIVE*/", "false")}
