@@ -1,5 +1,9 @@
 # invade-the-burg
 
+## Compilation and Operation
+
+Compile the plugin with ```./gradlew clean build --console=plain --no-daemon```. After it compiles, navigate to the zip folder in "invade-the-burg/build/distributions/" and install the latest version. JetBrains Air must be installed as well. The IDE must be restarted after installation. In Settings/Tools/Reel Break, you can modify the presets, recap preferences, and break behaviour. The plugin activates automatically when a prompt is sent to the JetBrains Air.
+
 ## What it is
 
 Reel Break is a JetBrains plugin that opens a configurable distraction over an active Air agent pane while the agent works and returns the developer when attention is needed. The product direction includes an ACP proxy for working / needs-permission / done signals and time-saved stats; diff → reel is a stretch goal. Those planned capabilities are not all implemented in this checkout.
