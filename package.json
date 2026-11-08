@@ -6,6 +6,6 @@
     "node": "24.x"
   },
   "scripts": {
-    "test": "node tests/media-visibility.test.cjs"
+    "test": "node tests/media-visibility.test.cjs && node tests/recap-player.test.cjs && node tests/input-visibility.test.cjs"
   }
 }

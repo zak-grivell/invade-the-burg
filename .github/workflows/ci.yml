@@ -33,4 +33,4 @@ jobs:
           node-version-file: .node-version
           cache: npm
       - run: npm ci
-      - run: node tests/media-visibility.test.cjs
+      - run: npm test

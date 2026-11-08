@@ -84,3 +84,15 @@ The Play button is hidden until both video and speech audio can play. Playback s
 ## Agent ETA
 
 Reel Break logs agent sessions locally and, when "Use ETA to time breaks" is on, uses past stretches to show time left and skip breaks for very short stretches. `src/test/resources/eta/seed-history.example.jsonl` and `seed-history.demo-short.jsonl` are synthetic demo data for trying the badge and skip behaviour, so any ETA evaluation (`./gradlew evaluateEta`) must use real session logs, not these files.
+
+## Completed agent queue
+
+The **Completed agents** tool window on the right queues newly completed prompts, even in background tabs. New background results join in finish order. Each entry shows its thread name and elapsed prompt time (including permission waits). `~` marks a prompt that was already running when first observed, so its earlier time is unknown. Existing completed conversations are not added on startup.
+
+Click an entry to open its thread and move it to the top of the queue. Switching editor panes also brings the open completed thread to the top. That highlighted current row stays first; drag the waiting names above or below each other to change the review order without switching threads. Dropping above the current row inserts directly below it. A blue insertion line shows the drop position, and Escape cancels the drag. Viewing a result alone never acknowledges or removes it. Sending the next prompt in the selected queued thread removes that completion and immediately opens the next waiting thread; starting a prompt in a background thread does not steal focus. The **×** beside a name dismisses only that completion, without submitting anything or permanently excluding the thread. A later completed prompt on that thread is added again. Closing a thread removes its queued result; the queue never reopens closed tabs.
+
+The queue is project-local and lasts for the IDE session. Completions seen in the same 200 ms observation use open-tab order as a tie-breaker. No prompt is submitted automatically. A running turn must be observed before its completion can be queued.
+
+Sending the final queued thread's next prompt, or removing the last completion with its cross, reopens Reels automatically. This also overrides an ETA skip for that run. Empty startup queues and background activity do not trigger this handoff, and a draft, permission request or regular code pane stays visible.
+
+The completed-agent sidebar is visible only alongside chat and recap playback. It stays hidden while browsing Reels, even if a background agent finishes. The sidebar contains only thread rows and their remove crosses. Starting a new prompt still returns you to chat when that prompt finishes. Switching editor tabs, split panes, or threads immediately suspends the old browser and cancels its pending fade. A newly selected working thread stays in chat until Resume, while a new prompt started from a draft may open its normal break. Hidden browsers disable focus/input and ignore page keyboard events; navigation returns focus to the selected editor's input.
