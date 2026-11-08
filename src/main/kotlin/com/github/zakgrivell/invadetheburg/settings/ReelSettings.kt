@@ -19,6 +19,24 @@ data class FavoriteWebsite(var name: String = "", var url: String = "") {
     override fun toString(): String = name
 }
 
+internal fun websitePresets(): List<FavoriteWebsite> = listOf(
+    FavoriteWebsite("X", "https://x.com/"),
+    FavoriteWebsite("Instagram Reels", DEFAULT_BREAK_URL),
+    FavoriteWebsite("TikTok", "https://www.tiktok.com/"),
+    FavoriteWebsite("LeetCode", "https://leetcode.com/problemset/"),
+    FavoriteWebsite("Duolingo", "https://www.duolingo.com/learn")
+)
+
+private fun websiteKey(url: String): String {
+    val uri = URI(url)
+    return uri.host.lowercase().removePrefix("www.") + (if (uri.port == -1) "" else ":" + uri.port) +
+        uri.rawPath.orEmpty().trimEnd('/') + (uri.rawQuery?.let { "?$it" } ?: "") +
+        (uri.rawFragment?.let { "#$it" } ?: "")
+}
+
+internal fun websiteChoices(favorites: List<FavoriteWebsite>): List<FavoriteWebsite> =
+    (favorites + websitePresets()).distinctBy { websiteKey(it.url) }.map { it.copy() }
+
 internal fun normalizeFavorites(values: List<FavoriteWebsite>): List<FavoriteWebsite> = values.map {
     require(it.name.isNotBlank()) { "Give each favourite a name." }
     FavoriteWebsite(it.name.trim(), normalizeBreakUrl(it.url))
@@ -45,7 +63,7 @@ class ReelSettings : PersistentStateComponent<ReelSettings.Options> {
         var recapMode: RecapMode = RecapMode.ASK
         var narrationVoiceId: String = ""
         var url: String = DEFAULT_BREAK_URL
-        var favorites: MutableList<FavoriteWebsite> = mutableListOf(FavoriteWebsite("Instagram Reels", DEFAULT_BREAK_URL))
+        var favorites: MutableList<FavoriteWebsite> = websitePresets().toMutableList()
         var useEtaToTimeBreaks: Boolean = true
     }
     private var options = Options()
@@ -73,6 +91,7 @@ class ReelSettings : PersistentStateComponent<ReelSettings.Options> {
     var favorites: List<FavoriteWebsite>
         get() = options.favorites.map { it.copy() }
         set(value) { options.favorites = normalizeFavorites(value).toMutableList() }
+    val availableWebsites: List<FavoriteWebsite> get() = websiteChoices(favorites)
     override fun getState(): Options = options
     override fun loadState(state: Options) {
         options = Options().apply {

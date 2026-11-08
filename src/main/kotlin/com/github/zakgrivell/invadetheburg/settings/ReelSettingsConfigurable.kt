@@ -52,6 +52,13 @@ class ReelSettingsConfigurable : SearchableConfigurable {
                 }
             }, BorderLayout.EAST)
             })
+            val presets = websitePresets()
+            add(JPanel(BorderLayout(8, 0)).apply {
+                add(JBLabel("Preset:"), BorderLayout.WEST)
+                add(javax.swing.JComboBox((listOf("Choose a preset…") + presets.map { it.name }).toTypedArray()).apply {
+                    addActionListener { if (selectedIndex > 0) input.text = presets[selectedIndex - 1].url }
+                }, BorderLayout.CENTER)
+            })
             add(JPanel(BorderLayout()).apply { add(etaBox, BorderLayout.WEST) })
         }, BorderLayout.NORTH)
         val model = object : DefaultTableModel(arrayOf("Name", "Website URL"), 0) {

@@ -41,7 +41,7 @@ internal class MultiAgentPreviewDialog(parent: JComponent) : DialogWrapper(paren
     private val breakButton = JButton("Open Reels")
     private var showingBreak = false
     private var updating = false
-    private val websites = service<ReelSettings>().favorites.ifEmpty {
+    private val websites = service<ReelSettings>().availableWebsites.ifEmpty {
         listOf(com.github.zakgrivell.invadetheburg.settings.FavoriteWebsite("Current website", service<ReelSettings>().url))
     }
     private val websitePicker = JComboBox(websites.toTypedArray())

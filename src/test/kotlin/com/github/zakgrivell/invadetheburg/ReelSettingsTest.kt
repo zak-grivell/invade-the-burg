@@ -8,6 +8,28 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ReelSettingsTest {
+    @Test fun `all five presets are available on new and existing installations`() {
+        val settings = ReelSettings()
+        val names = listOf("X", "Instagram Reels", "TikTok", "LeetCode", "Duolingo")
+        assertEquals(names, settings.availableWebsites.map { it.name })
+        settings.loadState(ReelSettings.Options().apply { favorites = mutableListOf() })
+        assertTrue(settings.favorites.isEmpty())
+        assertEquals(names, settings.availableWebsites.map { it.name })
+    }
+
+    @Test fun `presets preserve custom favourites and deduplicate equivalent website addresses`() {
+        val settings = ReelSettings()
+        settings.favorites = listOf(FavoriteWebsite("My TikTok", "https://tiktok.com"), FavoriteWebsite("Custom", "https://example.com/"))
+        val restored = ReelSettings().apply { loadState(settings.state) }
+        assertEquals(settings.favorites, restored.favorites)
+        assertEquals(6, restored.availableWebsites.size)
+        assertEquals("My TikTok", restored.availableWebsites.first().name)
+        assertEquals(1, restored.availableWebsites.count { it.url.contains("tiktok.com") })
+        val choices = restored.availableWebsites
+        choices.first().name = "Changed"
+        assertEquals("My TikTok", restored.availableWebsites.first().name)
+    }
+
     @org.junit.Test fun `recaps default to ask and preserve selected mode`() {
         val settings = com.github.zakgrivell.invadetheburg.settings.ReelSettings()
         org.junit.Assert.assertEquals(com.github.zakgrivell.invadetheburg.settings.RecapMode.ASK, settings.recapMode)
