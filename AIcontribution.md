@@ -31,3 +31,5 @@
 
 | 2026-11-08 | Codex | Codex/GPT | Merge latest main into feature/nice-animations, reconcile ETA timing/badges/settings with recaps and playback recovery, validate the combined branch, and open a PR. | Requested by Zak; 126 Kotlin tests, both JS suites, buildPlugin and verifyPluginStructure passed locally; human review pending. |
 | 2026-11-08 | Codex | Codex/GPT | Deploy the standalone ElevenLabs proxy on Heroku EU, transfer the existing local ElevenLabs key into Heroku config vars without displaying or committing it, route plugin narration through the hosted URL without client credentials, and update setup text and request tests. | Requested by Zak for the hackathon; live keyless speech returned HTTP 200 with 71,332 PCM bytes; JDK 25 Gradle build/test passed with 128 Kotlin tests; human review pending. |
+
+| 2026-11-08 | Codex | Codex/GPT | Move Back to Reels to the top right of chat, matching the break header switch button size and alignment. Add a placement/resizing regression test. | Requested by Zak; Kotlin tests, buildPlugin and verifyPluginStructure passed locally; human review pending. |
