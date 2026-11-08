@@ -20,6 +20,7 @@ jobs:
           distribution: temurin
           java-version: '25'
       - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/prepare-gradle
       - name: Build and Kotlin tests
         run: ./gradlew build test --console=plain --no-daemon
 
@@ -34,3 +35,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: node --test tests/gradle-bootstrap.test.cjs

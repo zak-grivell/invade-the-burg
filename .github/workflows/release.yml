@@ -45,6 +45,7 @@ jobs:
           cache-read-only: true
 
       # Update the Unreleased section with the current release note
+      - uses: ./.github/actions/prepare-gradle
       - name: Patch Changelog
         if: ${{ github.event.release.body != '' }}
         env:
