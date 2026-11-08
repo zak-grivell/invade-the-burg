@@ -10,17 +10,12 @@ internal class CompletedAgentQueue {
     private var observed = emptyMap<String, String?>()
     private val pending = mutableListOf<CompletedAgent>()
     private var serial = 0L
-    private var reviewing: String? = null
     val entries: List<CompletedAgent> get() = pending.toList()
 
-    fun selectionChanged(selected: String?) { if (reviewing != selected) reviewing = null }
-
-    /** Returns a thread to open only when the actively reviewed entry starts its next prompt. */
+    /** Returns the next waiting thread when the selected queued thread starts its next prompt. */
     fun observe(panes: List<QueuePane>, selected: String?, now: Long): String? {
         val live = panes.map { it.activity.identity }.toSet()
         var advance = false
-        var finishedHere = false
-        if (reviewing != selected) reviewing = null
         pending.removeAll { it.thread !in live }
         runs.keys.retainAll(live)
         for ((activity, name) in panes) {
@@ -29,13 +24,11 @@ internal class CompletedAgentQueue {
             if (queued >= 0 && pending[queued].name != name) pending[queued] = pending[queued].copy(name = name)
             if (activity.processing) {
                 if (pending.removeAll { it.thread == id }) {
-                    if (reviewing == id && selected == id) advance = true
-                    if (reviewing == id) reviewing = null
+                    if (selected == id) advance = true
                 }
                 runs.getOrPut(id) { Running(now, observed[id] !in setOf("READY", "UNREAD", "DRAFT")) }
             } else if (activity.completed) {
                 runs.remove(id)?.let { run ->
-                    if (id == selected) finishedHere = true
                     pending.add(CompletedAgent("$id:${++serial}", id, name, (now - run.since).coerceAtLeast(0), run.partial))
                 }
             } else if (activity.activity != "NEEDS_INPUT") {
@@ -43,26 +36,23 @@ internal class CompletedAgentQueue {
                 runs.remove(id)
             }
         }
-        if (finishedHere) reviewing = selected
         observed = panes.associate { it.activity.identity to it.activity.activity }
-        if (reviewing !in live) reviewing = null
         return if (advance) reviewNext() else null
     }
 
-    fun reviewNext(): String? = pending.firstOrNull()?.thread?.also { reviewing = it }
-    fun review(id: String): String? = pending.find { it.id == id }?.thread?.also { reviewing = it }
+    fun reviewNext(): String? = pending.firstOrNull()?.thread
+    fun review(id: String): String? {
+        val index = pending.indexOfFirst { it.id == id }
+        if (index < 0) return null
+        val entry = pending.removeAt(index)
+        pending.add(0, entry)
+        return entry.thread
+    }
     fun remove(id: String, selected: String?): String? {
         val entry = pending.find { it.id == id } ?: return null
         pending.remove(entry)
         val advance = selected == entry.thread
-        if (reviewing == entry.thread) reviewing = null
         return if (advance) reviewNext() else null
-    }
-    fun move(id: String, offset: Int) {
-        val from = pending.indexOfFirst { it.id == id }
-        if (from < 0) return
-        val to = (from + offset).coerceIn(0, pending.lastIndex)
-        if (to != from) pending.add(to, pending.removeAt(from))
     }
 }
 

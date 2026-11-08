@@ -31,10 +31,9 @@ class CompletedAgentQueueTest {
         val q = completed()
         assertEquals("b", q.observe(listOf(pane("a", "PROCESSING"), pane("b", "READY")), "a", 3000))
     }
-    @Test fun `fast manual tab changes between polls still disarm automatic advancement`() {
+    @Test fun `sending in the selected queued thread advances without a review action`() {
         val q = completed(); q.reviewNext()
-        q.selectionChanged("b"); q.selectionChanged("a")
-        assertNull(q.observe(listOf(pane("a", "PROCESSING"), pane("b", "READY")), "a", 3000))
+        assertEquals("b", q.observe(listOf(pane("a", "PROCESSING"), pane("b", "READY")), "a", 3000))
     }
     @Test fun `review flow advances only after new prompt in the actively reviewed thread`() {
         val q = completed()
@@ -43,11 +42,11 @@ class CompletedAgentQueueTest {
         assertEquals(listOf("b"), q.entries.map { it.thread })
         assertNull(q.observe(listOf(pane("a", "PROCESSING"), pane("b", "READY")), "b", 3200))
     }
-    @Test fun `manual tab switching disarms advance even when returning later`() {
+    @Test fun `viewing tabs retains results and a subsequent prompt advances automatically`() {
         val q = completed(); q.reviewNext()
         q.observe(listOf(pane("a", "READY"), pane("b", "READY")), "b", 2300)
         q.observe(listOf(pane("a", "READY"), pane("b", "READY")), "a", 2400)
-        assertNull(q.observe(listOf(pane("a", "PROCESSING"), pane("b", "READY")), "a", 2500))
+        assertEquals("b", q.observe(listOf(pane("a", "PROCESSING"), pane("b", "READY")), "a", 2500))
         assertEquals(listOf("b"), q.entries.map { it.thread })
     }
     @Test fun `background completion never steals focus and background restart only removes itself`() {
@@ -95,11 +94,12 @@ class CompletedAgentQueueTest {
     }
     @Test fun `reordering is stable across new completions and selected removal`() {
         val q = completed(); val b = q.entries.last()
-        q.move(b.id, -1)
+        assertEquals("b", q.review(b.id))
+        assertEquals(listOf("b", "a"), q.entries.map { it.thread })
         assertEquals("b", q.reviewNext())
         assertEquals("a", q.remove(b.id, "b"))
-        q.move("stale", 1)
-        q.move(q.entries.single().id, -100)
+        assertNull(q.review("stale"))
+        q.review(q.entries.single().id)
         assertEquals(listOf("a"), q.entries.map { it.thread })
     }
     @Test fun `permission wait first seen mid-prompt does not claim a complete duration`() {
@@ -109,10 +109,12 @@ class CompletedAgentQueueTest {
         q.observe(listOf(pane("a", "READY")), "a", 1000)
         assertTrue(q.entries.single().partial)
     }
-    @Test fun `explicitly marking the current thread done advances even after manual tab browsing`() {
+    @Test fun `cross on current completion advances while background cross retains the current thread`() {
         val q = completed()
-        q.selectionChanged("b"); q.selectionChanged("a")
         assertEquals("b", q.remove(q.entries.first().id, "a"))
+        val background = completed()
+        assertNull(background.remove(background.entries.last().id, "a"))
+        assertEquals(listOf("a"), background.entries.map { it.thread })
     }
     @Test fun `cancelled or unknown runs do not become successful queued completions`() {
         val q = started()

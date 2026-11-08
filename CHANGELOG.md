@@ -11,7 +11,7 @@
 - Local MP4/WebM or online background video, readiness-gated playback, and per-chat recap notifications.
 
 ### Fixed
-- Hide the completed-agent sidebar during scrolling, add Resume scrolling in chat/recaps, and suspend native browser input immediately on thread or editor changes.
+- Hide the completed-agent sidebar during scrolling and suspend native browser input immediately on thread or editor changes.
 - Recover policy-blocked videos on all configured sites with one muted inline retry.
 - Start new documents paused until the IDE supplies pane visibility, including codec failures during startup.
 - Detect native media errors and let explicit retry select a playable declared source without resetting blob/MediaSource streams.
@@ -20,5 +20,6 @@
 - Keep blocked or cancelled playback from appearing as video-load failures.
 
 ### Changed
+- Simplify the completed-agent queue to clickable, current-highlighted rows with per-row remove crosses. Clicking promotes a thread; submitting its next prompt advances automatically. Remove duplicate queue headers and the action toolbar.
 - Added native Retry video, Reload page, and Open in browser recovery controls for website breaks; recap controls remain separate.
 - Removed unused template test fixtures and replaced template documentation with project setup instructions.

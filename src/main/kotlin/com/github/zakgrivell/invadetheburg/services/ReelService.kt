@@ -37,7 +37,7 @@ class ReelService(private val project: Project) : Disposable {
     private var viewFile: VirtualFile? = null
     private var viewThread: String? = null
     private var viewEditor: javax.swing.JComponent? = null
-    private var publishedResume = false
+    private var publishedActiveThread: String? = null
     private var queueAllowed: Boolean? = null
     private val transition = PaneTransition()
     private val retiredRecaps = mutableListOf<ChatRecapOverlay>()
@@ -50,16 +50,16 @@ class ReelService(private val project: Project) : Disposable {
 
     internal fun onQueueChanged(listener: (QueueView) -> Unit): () -> Unit {
         queueListeners.add(listener)
-        listener(QueueView(completedQueue.entries, selectedThread() != null))
+        listener(QueueView(completedQueue.entries, selectedThread()))
         return { queueListeners.remove(listener) }
     }
     private fun publishQueue() {
         val entries = completedQueue.entries
-        val canResume = selectedThread() != null
-        if (entries == publishedQueue && canResume == publishedResume) return
-        publishedResume = canResume
+        val activeThread = selectedThread()
+        if (entries == publishedQueue && activeThread == publishedActiveThread) return
+        publishedActiveThread = activeThread
         publishedQueue = entries
-        queueListeners.toList().forEach { it(QueueView(entries, canResume)) }
+        queueListeners.toList().forEach { it(QueueView(entries, activeThread)) }
     }
     private fun selectedFile(): VirtualFile? = com.intellij.openapi.fileEditor.ex.FileEditorManagerEx.getInstanceEx(project).currentWindow?.selectedFile
         ?: FileEditorManager.getInstance(project).selectedFiles.firstOrNull()
@@ -69,13 +69,9 @@ class ReelService(private val project: Project) : Disposable {
         val manager = FileEditorManager.getInstance(project)
         if (!manager.openFiles.contains(file)) return
         manager.openFile(file, true)
-        // Re-arm after editor-selection events from our own navigation have settled.
-        if (selectedThread() == thread) completedQueue.entries.firstOrNull { it.thread == thread }?.let { completedQueue.review(it.id) }
     }
-    fun reviewNextCompleted() { openQueued(completedQueue.reviewNext()); publishQueue(); pollPane() }
     fun reviewCompleted(id: String) { openQueued(completedQueue.review(id)); publishQueue(); pollPane() }
     fun removeCompleted(id: String) { openQueued(completedQueue.remove(id, selectedThread())); publishQueue(); pollPane() }
-    fun moveCompleted(id: String, offset: Int) { completedQueue.move(id, offset); publishQueue() }
     private val narrator = ChatNarrator(project)
     private val recapViews = mutableMapOf<VirtualFile, ChatRecapOverlay>()
     private val recapOffers = mutableMapOf<VirtualFile, Notification>()
@@ -145,7 +141,6 @@ class ReelService(private val project: Project) : Disposable {
             project.messageBus.connect(this).subscribe(com.intellij.openapi.fileEditor.FileEditorManagerListener.FILE_EDITOR_MANAGER,
                 object : com.intellij.openapi.fileEditor.FileEditorManagerListener {
                     override fun selectionChanged(event: com.intellij.openapi.fileEditor.FileEditorManagerEvent) {
-                        completedQueue.selectionChanged(AirPaneActivity.read(event.newFile)?.identity)
                         suspendForNavigation(event.newFile)
                     }
                 })

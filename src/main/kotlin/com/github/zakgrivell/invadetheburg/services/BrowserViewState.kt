@@ -21,7 +21,7 @@ internal class BrowserViewState {
     }
 }
 
-internal data class QueueView(val entries: List<CompletedAgent>, val canResume: Boolean)
+internal data class QueueView(val entries: List<CompletedAgent>, val activeThread: String?)
 
 internal fun queueVisibleFor(target: String, pane: PaneActivity?, editorShowing: Boolean): Boolean =
     target in setOf("chat", "recap") && pane != null && editorShowing

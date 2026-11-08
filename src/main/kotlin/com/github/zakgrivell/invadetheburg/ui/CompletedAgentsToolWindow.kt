@@ -16,82 +16,72 @@ class CompletedAgentsToolWindow : ToolWindowFactory {
     override fun init(toolWindow: ToolWindow) { toolWindow.setAvailable(false, null) }
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val service = project.service<ReelService>()
-        val panel = CompletedAgentsPanel(service::reviewCompleted, service::removeCompleted, service::moveCompleted, service::reviewNextCompleted, service::resumeScrolling)
-        val subscription = service.onQueueChanged { view ->
-            panel.update(view.entries)
-            panel.setResumeAvailable(view.canResume)
-            toolWindow.title = "Completed agents (${view.entries.size})"
-        }
+        val panel = CompletedAgentsPanel(service::reviewCompleted, service::removeCompleted)
+        val subscription = service.onQueueChanged { view -> panel.update(view.entries, view.activeThread) }
         val content = ContentFactory.getInstance().createContent(panel, "", false)
         content.setDisposer(Disposable { subscription() })
         toolWindow.contentManager.addContent(content)
+        // The tool window already has its own heading; a title creates a second tab/header.
+        toolWindow.title = ""
         service.start()
     }
 }
 
-/** Identity-based actions remain correct if a completion arrives while the user is selecting a row. */
+/** Real per-row buttons support click, keyboard focus and accessibility without a separate toolbar. */
 internal class CompletedAgentsPanel(
     private val review: (String) -> Unit,
-    private val remove: (String) -> Unit,
-    private val move: (String, Int) -> Unit,
-    next: () -> Unit,
-    resume: () -> Unit = {}
-) : JPanel(BorderLayout(0, 8)) {
-    private val model = DefaultListModel<CompletedAgent>()
-    private val list = JList(model).apply {
-        selectionMode = ListSelectionModel.SINGLE_SELECTION
-        cellRenderer = ListCellRenderer { _, item, _, selected, _ ->
-            JLabel().apply {
-                putClientProperty("html.disable", true)
-                text = "${item.name}  ·  ${promptDuration(item)}"
-                border = BorderFactory.createEmptyBorder(8, 10, 8, 10)
-                isOpaque = true
-                background = if (selected) UIManager.getColor("List.selectionBackground") else UIManager.getColor("List.background")
-                foreground = if (selected) UIManager.getColor("List.selectionForeground") else UIManager.getColor("List.foreground")
-                toolTipText = if (item.partial) "Time observed since this running prompt was first seen" else "Elapsed prompt time, including permission waits"
-            }
+    private val remove: (String) -> Unit
+) : JPanel(BorderLayout()) {
+    private inner class Row(val id: String) : JPanel(BorderLayout(6, 0)) {
+        val open = JButton().apply {
+            putClientProperty("html.disable", true)
+            horizontalAlignment = SwingConstants.LEFT
+            isContentAreaFilled = false
+            isBorderPainted = false
+            addActionListener { review(id) }
+        }
+        val close = JButton("×").apply {
+            toolTipText = "Remove this completion from the queue"
+            isContentAreaFilled = false
+            isBorderPainted = false
+            addActionListener { remove(id) }
+        }
+        init {
+            border = BorderFactory.createEmptyBorder(4, 4, 4, 4)
+            add(open, BorderLayout.CENTER)
+            add(close, BorderLayout.EAST)
+            alignmentX = 0f
+        }
+        fun update(entry: CompletedAgent, active: Boolean) {
+            open.text = "${entry.name}  ·  ${promptDuration(entry)}" + if (active) "  (Current)" else ""
+            open.toolTipText = entry.name + if (entry.partial) " — observed time; prompt was already running" else " — elapsed prompt time"
+            close.accessibleContext.accessibleName = "Remove ${entry.name} from queue"
+            background = UIManager.getColor(if (active) "List.selectionBackground" else "List.background")
+            open.foreground = UIManager.getColor(if (active) "List.selectionForeground" else "List.foreground")
+            close.foreground = open.foreground
+            maximumSize = java.awt.Dimension(Int.MAX_VALUE, preferredSize.height)
         }
     }
-    private val empty = JLabel("No completed prompts waiting.")
-    private val open = JButton("Review").apply { addActionListener { selected()?.let { review(it.id) } } }
-    private val done = JButton("✓ Done").apply { addActionListener { selected()?.let { remove(it.id) } } }
-    private val discard = JButton("Remove from queue").apply { addActionListener { selected()?.let { remove(it.id) } } }
-    private val up = JButton("Move up").apply { addActionListener { selected()?.let { move(it.id, -1) } } }
-    private val down = JButton("Move down").apply { addActionListener { selected()?.let { move(it.id, 1) } } }
-    private val resumeButton = JButton("Resume scrolling").apply { addActionListener { resume() } }
-    fun setResumeAvailable(value: Boolean) { resumeButton.isEnabled = value }
-    private val nextButton = JButton("Review next").apply { addActionListener { next() } }
+    private val rows = linkedMapOf<String, Row>()
+    private val list = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
+    private val empty = JLabel("No completed prompts waiting.").apply { border = BorderFactory.createEmptyBorder(8, 8, 8, 8) }
     init {
-        border = BorderFactory.createEmptyBorder(8, 8, 8, 8)
-        add(JPanel(BorderLayout(0, 6)).apply {
-            add(nextButton, BorderLayout.NORTH)
-            add(JLabel("Finish order · reorder with Move up / Move down"), BorderLayout.SOUTH)
-        }, BorderLayout.NORTH)
-        add(JPanel(BorderLayout()).apply { add(empty, BorderLayout.NORTH); add(JScrollPane(list), BorderLayout.CENTER) }, BorderLayout.CENTER)
-        add(JPanel(java.awt.GridLayout(0, 2, 6, 6)).apply { listOf(open, done, discard, up, down, resumeButton).forEach { add(it) } }, BorderLayout.SOUTH)
-        list.addListSelectionListener { refreshButtons() }
-        list.inputMap.put(KeyStroke.getKeyStroke("ENTER"), "review")
-        list.actionMap.put("review", object : AbstractAction() { override fun actionPerformed(e: java.awt.event.ActionEvent?) { open.doClick() } })
-        list.inputMap.put(KeyStroke.getKeyStroke("DELETE"), "remove")
-        list.actionMap.put("remove", object : AbstractAction() { override fun actionPerformed(e: java.awt.event.ActionEvent?) { discard.doClick() } })
-        refreshButtons()
+        add(empty, BorderLayout.NORTH)
+        add(JScrollPane(JPanel(BorderLayout()).apply { add(list, BorderLayout.NORTH) }).apply {
+            border = BorderFactory.createEmptyBorder()
+            verticalScrollBar.unitIncrement = 16
+        }, BorderLayout.CENTER)
     }
-    private fun selected() = list.selectedValue
-    fun update(entries: List<CompletedAgent>) {
-        if ((0 until model.size()).map { model[it] } == entries) return
-        val id = selected()?.id
-        val previousIndex = list.selectedIndex
-        model.clear()
-        entries.forEach(model::addElement)
-        val retained = entries.indexOfFirst { it.id == id }
-        if (entries.isNotEmpty()) list.selectedIndex = if (retained >= 0) retained else previousIndex.coerceIn(0, entries.lastIndex)
-        refreshButtons()
-    }
-    private fun refreshButtons() {
-        empty.isVisible = model.isEmpty
-        nextButton.isEnabled = !model.isEmpty
-        listOf(open, done, discard).forEach { it.isEnabled = selected() != null }
-        up.isEnabled = list.selectedIndex > 0
-        down.isEnabled = list.selectedIndex >= 0 && list.selectedIndex < model.size() - 1
+    fun update(entries: List<CompletedAgent>, activeThread: String? = null) {
+        val live = entries.map { it.id }.toSet()
+        rows.keys.filter { it !in live }.forEach { id -> list.remove(rows.remove(id)) }
+        entries.forEachIndexed { index, entry ->
+            val row = rows.getOrPut(entry.id) { Row(entry.id).also { list.add(it) } }
+            row.update(entry, entry.thread == activeThread)
+            if (list.getComponentZOrder(row) != index) list.setComponentZOrder(row, index)
+        }
+        empty.isVisible = entries.isEmpty()
+        list.revalidate()
+        list.repaint()
     }
 }
