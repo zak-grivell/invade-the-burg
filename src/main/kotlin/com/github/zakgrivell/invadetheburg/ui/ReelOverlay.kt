@@ -72,7 +72,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
     private var updatingSwitcher = false
     private var switcherItems: List<FavoriteWebsite> = emptyList()
     private val websiteSwitcher = JComboBox<FavoriteWebsite>().apply {
-        toolTipText = "Switch website — manage favourites in Settings"
+        toolTipText = "Switch website — presets and favourites in Settings"
         addActionListener {
             if (!updatingSwitcher) {
                 (selectedItem as? FavoriteWebsite)?.let { service<ReelSettings>().url = it.url }
@@ -81,7 +81,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
     }
 
     private fun updateSwitcher(url: String) {
-        val favorites = service<ReelSettings>().favorites
+        val favorites = service<ReelSettings>().availableWebsites
         val items = if (favorites.any { it.url == url }) favorites
             else listOf(FavoriteWebsite("Current website", url)) + favorites
         if (items == switcherItems && (websiteSwitcher.selectedItem as? FavoriteWebsite)?.url == url) return

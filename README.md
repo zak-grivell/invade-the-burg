@@ -38,7 +38,7 @@ Licensed under the [GNU General Public License v3.0](LICENSE) (SPDX: `GPL-3.0-on
 
 Build the plugin and install the ZIP from `build/distributions` using **Settings → Plugins → ⚙ → Install Plugin from Disk**, then restart the IDE.
 
-Use **Settings → Tools → Reel Break** to set the website URL, manage favourites, or open **Setup** to sign in. The overlay follows the selected Air pane automatically. **Back to work** dismisses it; **Back to Reels** returns to the retained page while the agent is working.
+Use **Settings → Tools → Reel Break** to choose a preset, set a custom website URL, manage favourites, or open **Setup** to sign in. Built-in presets include X, Instagram Reels, TikTok, LeetCode, and Duolingo. These also appear in the break website switcher on existing installations; your saved favourites keep their names and take precedence over matching presets. The overlay follows the selected Air pane automatically. **Back to work** dismisses it; **Back to Reels** returns to the retained page while the agent is working.
 
 The plugin uses WebKit on macOS, WebView2 on Windows, and WebKitGTK on Linux. Windows needs the WebView2 Runtime; Linux needs WebKitGTK, GStreamer H.264/AAC codecs, and X11/XWayland. Native binaries are bundled for x86-64 and ARM64.
 

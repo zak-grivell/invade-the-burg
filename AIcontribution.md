@@ -32,3 +32,5 @@
 | 2026-11-08 | Codex | Codex/GPT | Merge latest main into feature/nice-animations, reconcile ETA timing/badges/settings with recaps and playback recovery, validate the combined branch, and open a PR. | Requested by Zak; 126 Kotlin tests, both JS suites, buildPlugin and verifyPluginStructure passed locally; human review pending. |
 
 | 2026-11-08 | Codex | Codex/GPT | Move Back to Reels to the top right of chat, matching the break header switch button size and alignment. Add a placement/resizing regression test. | Requested by Zak; Kotlin tests, buildPlugin and verifyPluginStructure passed locally; human review pending. |
+
+| 2026-11-08 | Codex | Codex/GPT | Add built-in X, Instagram Reels, TikTok, LeetCode and Duolingo presets to settings, the website switcher and preview, preserving existing favourites. | Requested by Zak; 129 Kotlin tests, JS suites, build and structure checks passed; verified all presets and Duolingo URL selection in the IDE through computer use; human review pending. |
