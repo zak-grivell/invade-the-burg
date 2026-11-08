@@ -52,7 +52,7 @@ internal class CompletedAgentsPanel(
         list.repaint()
     }
     private fun destination(point: Point): Drop? {
-        if (point.x !in 0 until list.width || point.y < 0 || !viewport.viewRect.contains(point)) return null
+        if (point.x !in 0 until list.width || point.y < 0 || !list.bounds.contains(point)) return null
         val ordered = list.components.filterIsInstance<Row>()
         val row = ordered.firstOrNull { point.y < it.y + it.height } ?: ordered.lastOrNull() ?: return null
         return Drop(row.id, row.id == activeId || point.y >= row.y + row.height / 2)
@@ -126,15 +126,10 @@ internal class CompletedAgentsPanel(
             g.fillRect(0, y, width, 2)
         }
     }.apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
-    private val viewport = JViewport().apply { view = list }
     private val empty = JLabel("No completed prompts waiting.").apply { border = BorderFactory.createEmptyBorder(8, 8, 8, 8) }
     init {
         add(empty, BorderLayout.NORTH)
-        add(JScrollPane().apply {
-            setViewport(this@CompletedAgentsPanel.viewport)
-            border = BorderFactory.createEmptyBorder()
-            verticalScrollBar.unitIncrement = 16
-        }, BorderLayout.CENTER)
+        add(list, BorderLayout.CENTER)
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("ESCAPE"), "cancelDrag")
         actionMap.put("cancelDrag", object : AbstractAction() {
             override fun isEnabled() = drag?.moving == true
