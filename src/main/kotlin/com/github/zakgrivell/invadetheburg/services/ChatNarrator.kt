@@ -44,7 +44,7 @@ internal class ChatNarrator(private val project: Project) : Disposable {
                 val voice = configuredVoice.ifBlank {
                     System.getenv("ELEVENLABS_VOICE_ID") ?: readConfig("elevenlabs-voice-id")
                 }.trim()
-                check(voice.matches(Regex("[A-Za-z0-9_-]+"))) { "Set your Peter Griffin ElevenLabs voice ID in Settings > Tools > Reel Break." }
+                check(voice.matches(Regex("[A-Za-z0-9_-]+"))) { "Set your summary voice's ElevenLabs voice ID in Settings > Tools > Reel Break." }
                 val text = chatRecap(turn)
                 if (closed) return@submit
                 val audio = ByteArrayOutputStream()

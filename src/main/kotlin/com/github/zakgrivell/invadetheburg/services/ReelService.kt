@@ -127,7 +127,7 @@ class ReelService(private val project: Project) : Disposable {
             RecapMode.ALWAYS -> watch(false)
             RecapMode.ASK -> {
                 val toast = NotificationGroupManager.getInstance().getNotificationGroup("Reel Break Narration")
-                    .createNotification("Want a recap?", "Watch this response with Peter Griffin and bundled gameplay footage.", NotificationType.INFORMATION)
+                    .createNotification("Want a recap?", "Watch this response with your summary voice and bundled gameplay footage.", NotificationType.INFORMATION)
                 toast.addAction(NotificationAction.createSimpleExpiring("Watch recap") { recapOffers.remove(file); watch(true) })
                 recapOffers[file] = toast
                 toast.notify(project)
