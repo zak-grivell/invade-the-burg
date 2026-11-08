@@ -93,4 +93,6 @@ Click an entry to open its thread and move it to the top of the queue. Switching
 
 The queue is project-local and lasts for the IDE session. Completions seen in the same 200 ms observation use open-tab order as a tie-breaker. No prompt is submitted automatically. A running turn must be observed before its completion can be queued.
 
+Sending the final queued thread's next prompt, or removing the last completion with its cross, reopens Reels automatically. This also overrides an ETA skip for that run. Empty startup queues and background activity do not trigger this handoff, and a draft, permission request or regular code pane stays visible.
+
 The completed-agent sidebar is visible only alongside chat and recap playback. It stays hidden while browsing Reels, even if a background agent finishes. The sidebar contains only thread rows and their remove crosses. Starting a new prompt still returns you to chat when that prompt finishes. Switching editor tabs, split panes, or threads immediately suspends the old browser and cancels its pending fade. A newly selected working thread stays in chat until Resume, while a new prompt started from a draft may open its normal break. Hidden browsers disable focus/input and ignore page keyboard events; navigation returns focus to the selected editor's input.

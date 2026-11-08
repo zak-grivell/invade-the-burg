@@ -11,6 +11,7 @@
 - Local MP4/WebM or online background video, readiness-gated playback, and per-chat recap notifications.
 
 ### Fixed
+- Reopen Reels after submitting the last queued thread's next prompt or removing the last completion, including when ETA would skip its break. Preserve draft and permission focus, and avoid reopening on repeated empty polls.
 - Hide the completed-agent sidebar during scrolling and suspend native browser input immediately on thread or editor changes.
 - Recover policy-blocked videos on all configured sites with one muted inline retry.
 - Start new documents paused until the IDE supplies pane visibility, including codec failures during startup.

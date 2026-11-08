@@ -1,6 +1,6 @@
 package com.github.zakgrivell.invadetheburg.services
 
-/** A navigation suspends the old browser; only a new run or explicit Resume may reveal it. */
+/** Navigation suspends the old browser; new runs, explicit Resume and queue handoffs may reveal it. */
 internal class BrowserViewState {
     private var suspended = false
     private var manual = false
@@ -12,6 +12,15 @@ internal class BrowserViewState {
     }
     fun suspend() { suspended = true; manual = false }
     fun resume() { suspended = false; manual = true }
+    /** Empty startup/polls and background activity must not take focus from an unrelated chat. */
+    fun resumeAfterQueueChange(previous: List<CompletedAgent>, remaining: List<CompletedAgent>, pane: PaneActivity?, explicitRemoval: Boolean = false): Boolean {
+        if (previous.isEmpty() || remaining.isNotEmpty() || pane == null) return false
+        val submittedCurrent = pane.processing && previous.any { it.thread == pane.identity }
+        val dismissedLast = explicitRemoval && (pane.processing || pane.completed)
+        if (!submittedCurrent && !dismissedLast) return false
+        resume()
+        return true
+    }
     fun showBrowser(pane: PaneActivity?): Boolean {
         if (pane == null) { suspend(); wasProcessing = false; return false }
         if (pane.processing && !wasProcessing) suspended = false

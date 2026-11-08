@@ -73,8 +73,24 @@ class ReelService(private val project: Project) : Disposable {
         manager.openFile(file, true)
     }
     fun reviewCompleted(id: String) { openQueued(completedQueue.review(id)); publishQueue(); pollPane() }
-    fun removeCompleted(id: String) { openQueued(completedQueue.remove(id, selectedThread())); publishQueue(); pollPane() }
+    fun removeCompleted(id: String) {
+        val previous = completedQueue.entries
+        val next = completedQueue.remove(id, selectedThread())
+        resumeDrainedQueue(previous, explicitRemoval = true)
+        openQueued(next); publishQueue(); pollPane()
+    }
     fun reorderCompleted(id: String, targetId: String, after: Boolean) { completedQueue.reorder(id, targetId, after, selectedThread()); publishQueue() }
+    private fun resumeDrainedQueue(previous: List<CompletedAgent>, explicitRemoval: Boolean = false) {
+        val pane = AirPaneActivity.read(selectedFile())
+        if (browserView.resumeAfterQueueChange(previous, completedQueue.entries, pane, explicitRemoval)) {
+            state.resume()
+            etaGuard {
+                // A new stretch can set SKIP_BREAK, so observe its start before overriding that choice.
+                eta?.observe(pane, System.currentTimeMillis())
+                eta?.forceBreak()
+            }
+        }
+    }
     private val narrator = ChatNarrator(project)
     private val recapViews = mutableMapOf<VirtualFile, ChatRecapOverlay>()
     private val recapOffers = mutableMapOf<VirtualFile, Notification>()
@@ -211,7 +227,9 @@ class ReelService(private val project: Project) : Disposable {
         }
         val panes = manager.openFiles.mapNotNull { file -> AirPaneActivity.read(file)?.let { file to it } }.distinctBy { it.second.identity }
         queueFiles = panes.associate { (file, activity) -> activity.identity to file }
+        val previousQueue = completedQueue.entries
         val advanceTo = completedQueue.observe(panes.map { (file, activity) -> QueuePane(activity, file.presentableName) }, selectedThread(), System.nanoTime() / 1_000_000)
+        resumeDrainedQueue(previousQueue)
         publishQueue()
         if (advanceTo != null) openQueued(advanceTo)
         (recapViews.keys + recapOffers.keys + latestTurns.keys).toSet().filter {
