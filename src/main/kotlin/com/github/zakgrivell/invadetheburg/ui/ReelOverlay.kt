@@ -126,6 +126,19 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         view?.repaint()
     }
 
+    private var warmHost: JPanel? = null
+    fun prepare(editor: JComponent?, url: String) {
+        val browser = page.prepare(url)
+        val root = editor?.let(SwingUtilities::getRootPane) ?: return
+        if (warmHost != null || view != null) return
+        warmHost = JPanel(BorderLayout()).apply {
+            setBounds(-802, 0, 800, 600)
+            add(browser.component, BorderLayout.CENTER)
+            root.layeredPane.add(this, JLayeredPane.DEFAULT_LAYER, 0)
+            doLayout()
+        }
+    }
+
     fun showOver(editor: JComponent, url: String): Boolean {
         cancelCompletion()
         hideReturnButton()
@@ -139,6 +152,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         updateSwitcher(url)
         if (view == null) {
             view = JPanel(BorderLayout()).apply {
+                isVisible = false
                 add(JPanel(BorderLayout()).apply {
                     add(JPanel(BorderLayout()).apply {
                         add(JBLabel("  Reel Break · v$version"), BorderLayout.CENTER)
@@ -154,6 +168,8 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
                 }, BorderLayout.NORTH)
                 add(browser.component, BorderLayout.CENTER)
             }
+            warmHost?.let { it.parent?.remove(it) }
+            warmHost = null
         }
         if (layer !== nextLayer) {
             layer?.remove(view)
@@ -239,6 +255,8 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
     }
 
     override fun dispose() {
+        warmHost?.let { it.parent?.remove(it) }
+        warmHost = null
         hide()
         page.dispose()
         returnLayer?.remove(returnButton)
