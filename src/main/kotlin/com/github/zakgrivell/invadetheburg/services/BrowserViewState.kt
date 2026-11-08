@@ -1,5 +1,7 @@
 package com.github.zakgrivell.invadetheburg.services
 
+import com.github.zakgrivell.invadetheburg.services.tags.AgentTag
+
 /** Navigation suspends the old browser; new runs, explicit Resume and queue handoffs may reveal it. */
 internal class BrowserViewState {
     private var suspended = false
@@ -30,7 +32,8 @@ internal class BrowserViewState {
     }
 }
 
-internal data class QueueView(val entries: List<CompletedAgent>, val activeThread: String?)
+/** [tags] maps a thread to its latest valid agent tag; untagged threads are absent. */
+internal data class QueueView(val entries: List<CompletedAgent>, val activeThread: String?, val tags: Map<String, AgentTag> = emptyMap())
 
 internal fun queueVisibleFor(target: String, pane: PaneActivity?, editorShowing: Boolean): Boolean =
     target in setOf("chat", "recap") && pane != null && editorShowing

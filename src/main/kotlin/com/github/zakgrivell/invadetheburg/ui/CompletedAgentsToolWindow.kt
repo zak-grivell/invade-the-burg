@@ -3,6 +3,8 @@ package com.github.zakgrivell.invadetheburg.ui
 import com.github.zakgrivell.invadetheburg.services.CompletedAgent
 import com.github.zakgrivell.invadetheburg.services.ReelService
 import com.github.zakgrivell.invadetheburg.services.promptDuration
+import com.github.zakgrivell.invadetheburg.services.tags.AgentTag
+import com.github.zakgrivell.invadetheburg.services.tags.agentTagMessage
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
@@ -24,7 +26,7 @@ class CompletedAgentsToolWindow : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val service = project.service<ReelService>()
         val panel = CompletedAgentsPanel(service::reviewCompleted, service::removeCompleted, service::reorderCompleted)
-        val subscription = service.onQueueChanged { view -> panel.update(view.entries, view.activeThread) }
+        val subscription = service.onQueueChanged { view -> panel.update(view.entries, view.activeThread, view.tags) }
         val content = ContentFactory.getInstance().createContent(panel, "", false)
         content.setDisposer(Disposable { subscription() })
         toolWindow.contentManager.addContent(content)
@@ -106,9 +108,11 @@ internal class CompletedAgentsPanel(
             val listener = dragListener(id)
             listOf(this, open).forEach { it.addMouseListener(listener); it.addMouseMotionListener(listener) }
         }
-        fun update(entry: CompletedAgent, active: Boolean) {
-            open.text = "${entry.name}  ·  ${promptDuration(entry)}" + if (active) "  (Current)" else ""
-            open.toolTipText = entry.name + (if (entry.partial) " — observed time; prompt was already running" else " — elapsed prompt time") + if (active) "; current thread stays first" else "; drag to reorder"
+        fun update(entry: CompletedAgent, active: Boolean, tag: AgentTag?) {
+            open.text = "${entry.name}  ·  ${promptDuration(entry)}" + (if (tag != null) "  [${tag.name.uppercase()}]" else "") + if (active) "  (Current)" else ""
+            // Untagged rows keep exactly the previous tooltip; tagged rows lead with the agent's question.
+            open.toolTipText = (if (tag != null) agentTagMessage(tag) + "  ·  " else "") +
+                entry.name + (if (entry.partial) " — observed time; prompt was already running" else " — elapsed prompt time") + if (active) "; current thread stays first" else "; drag to reorder"
             close.accessibleContext.accessibleName = "Remove ${entry.name} from queue"
             background = UIManager.getColor(if (active) "List.selectionBackground" else "List.background")
             open.foreground = UIManager.getColor(if (active) "List.selectionForeground" else "List.foreground")
@@ -137,7 +141,7 @@ internal class CompletedAgentsPanel(
         })
         addHierarchyListener { if (!isShowing) cancelDrag() }
     }
-    fun update(entries: List<CompletedAgent>, activeThread: String? = null) {
+    fun update(entries: List<CompletedAgent>, activeThread: String? = null, tags: Map<String, AgentTag> = emptyMap()) {
         val live = entries.map { it.id }.toSet()
         val nextActive = entries.firstOrNull { it.thread == activeThread }?.id
         if (activeId != nextActive || drag?.id?.let { it !in live } == true) cancelDrag()
@@ -145,7 +149,7 @@ internal class CompletedAgentsPanel(
         rows.keys.filter { it !in live }.forEach { id -> list.remove(rows.remove(id)) }
         entries.forEachIndexed { index, entry ->
             val row = rows.getOrPut(entry.id) { Row(entry.id).also { list.add(it) } }
-            row.update(entry, entry.thread == activeThread)
+            row.update(entry, entry.thread == activeThread, tags[entry.thread])
             if (list.getComponentZOrder(row) != index) list.setComponentZOrder(row, index)
         }
         empty.isVisible = entries.isEmpty()
