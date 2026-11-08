@@ -53,6 +53,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       # Build plugin
+      - uses: ./.github/actions/prepare-gradle
       - name: Build plugin
         run: ./gradlew buildPlugin
 
@@ -95,6 +96,7 @@ jobs:
           cache-read-only: true
 
       # Run tests
+      - uses: ./.github/actions/prepare-gradle
       - name: Run Tests
         run: ./gradlew check
 
@@ -138,6 +140,7 @@ jobs:
           cache-read-only: true
 
       # Run Verify Plugin task and IntelliJ Plugin Verifier tool
+      - uses: ./.github/actions/prepare-gradle
       - name: Run Plugin Verification tasks
         run: ./gradlew verifyPlugin
 
@@ -178,6 +181,7 @@ jobs:
           cache-read-only: true
 
       # Remove old release drafts by using the curl request for the available releases with a draft flag
+      - uses: ./.github/actions/prepare-gradle
       - name: Remove Old Release Drafts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

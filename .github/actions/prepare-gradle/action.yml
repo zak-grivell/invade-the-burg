@@ -1,0 +1,9 @@
+name: Prepare Gradle distribution
+description: Populate the wrapper cache through the official release API
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: node "$GITHUB_ACTION_PATH/prepare.cjs"
