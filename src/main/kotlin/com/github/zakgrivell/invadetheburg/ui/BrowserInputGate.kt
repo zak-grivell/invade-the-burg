@@ -30,3 +30,16 @@ internal fun chatFocusTarget(preferred: Component?, root: Component?): Component
     }
     return preferred?.let(::input) ?: root?.let(::input) ?: preferred?.takeIf { it.isShowing && it.isFocusable }
 }
+
+/** Resolve the composer after browser hiding, and discard a handoff invalidated by navigation or a dialog. */
+internal fun requestChatFocus(
+    root: Component?,
+    preferred: () -> Component?,
+    isCurrent: () -> Boolean,
+    request: (Component) -> Unit,
+    defer: (() -> Unit) -> Unit = { javax.swing.SwingUtilities.invokeLater(it) }
+) {
+    defer {
+        if (isCurrent()) chatFocusTarget(preferred(), root)?.let(request)
+    }
+}

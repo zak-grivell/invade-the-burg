@@ -141,6 +141,7 @@ internal class SystemBreakPage(url: String, private val ownsPlaybackControls: Bo
         browser?.let { view ->
             inputGate.setActive(view, active)
             view.isVisible = active
+            if (!active) MacBrowserFocus.releaseHiddenBrowser(view) { !active && !disposed }
             view.eval(inputScript.replace("/*ACTIVE*/", active.toString()))
         }
         if (ownsPlaybackControls) {

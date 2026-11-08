@@ -2,6 +2,7 @@ package com.github.zakgrivell.invadetheburg
 
 import com.github.zakgrivell.invadetheburg.services.*
 import com.github.zakgrivell.invadetheburg.ui.BrowserInputGate
+import com.github.zakgrivell.invadetheburg.ui.requestChatFocus
 import org.junit.Assert.*
 import org.junit.Test
 import javax.swing.*
@@ -80,6 +81,30 @@ class BrowserViewStateTest {
             assertTrue(late.isFocusable)
             assertFalse(disabled.isEnabled)
             assertFalse(disabled.isFocusable)
+        }
+    }
+    @Test fun `returning from browser resolves composer after hide instead of focusing a removed control`() {
+        SwingUtilities.invokeAndWait {
+            val root = JPanel()
+            val old = object : JTextArea() { override fun isShowing() = false }
+            val composer = object : JTextArea() { override fun isShowing() = true }
+            val tasks = mutableListOf<() -> Unit>()
+            val focused = mutableListOf<java.awt.Component>()
+            requestChatFocus(root, { old }, { true }, { focused.add(it) }, { tasks.add(it) })
+            assertTrue(focused.isEmpty())
+            root.add(composer) // Chat only becomes editable after the overlay is hidden.
+            tasks.single().invoke()
+            assertEquals(listOf(composer), focused)
+        }
+    }
+    @Test fun `pending composer focus cannot steal input after a pane change or new dialog`() {
+        SwingUtilities.invokeAndWait {
+            val composer = object : JTextArea() { override fun isShowing() = true }
+            val tasks = mutableListOf<() -> Unit>()
+            var stillCurrent = true
+            requestChatFocus(composer, { fail("Stale editor must not be inspected"); null }, { stillCurrent }, { fail("Stale callback stole focus") }, { tasks.add(it) })
+            stillCurrent = false
+            tasks.single().invoke()
         }
     }
 }

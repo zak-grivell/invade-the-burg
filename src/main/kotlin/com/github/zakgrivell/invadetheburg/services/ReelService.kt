@@ -195,16 +195,24 @@ class ReelService(private val project: Project) : Disposable {
         viewThread = AirPaneActivity.read(file)?.identity
         viewEditor = manager.selectedEditor?.component
         publishQueue()
+        if (hadBrowser) restoreComposerFocus(file, viewEditor, epoch)
         javax.swing.SwingUtilities.invokeLater {
             if (disposed || project.isDisposed || epoch != viewEpoch || selectedFile() != file) return@invokeLater
-            if (hadBrowser) {
-                val editor = manager.selectedEditor
-                val preferred = editor?.preferredFocusedComponent
-                val focus = com.github.zakgrivell.invadetheburg.ui.chatFocusTarget(preferred, editor?.component)
-                if (focus != null) com.intellij.openapi.wm.IdeFocusManager.getInstance(project).requestFocus(focus, true)
-            }
             pollPane()
         }
+    }
+    private fun restoreComposerFocus(file: VirtualFile?, editor: javax.swing.JComponent?, epoch: Long) {
+        val manager = FileEditorManager.getInstance(project)
+        com.github.zakgrivell.invadetheburg.ui.requestChatFocus(
+            root = editor,
+            preferred = { manager.selectedEditor?.preferredFocusedComponent },
+            isCurrent = {
+                !disposed && !project.isDisposed && epoch == viewEpoch && selectedFile() == file &&
+                    editor != null && manager.selectedEditor?.component === editor &&
+                    javax.swing.SwingUtilities.getWindowAncestor(editor)?.isActive == true
+            },
+            request = { com.intellij.openapi.wm.IdeFocusManager.getInstance(project).requestFocus(it, true) }
+        )
     }
     private fun updateQueueVisibility(target: String, pane: PaneActivity?, editor: javax.swing.JComponent?) {
         val window = com.intellij.openapi.wm.ToolWindowManager.getInstance(project).getToolWindow("Completed agents") ?: return
@@ -305,6 +313,7 @@ class ReelService(private val project: Project) : Disposable {
         val key: Any = if (target == "chat") "chat" else Triple(selectedFile, target, if (target == "recap") selectedRecap else null)
         transition.show(key, editor) {
             if (epoch != viewEpoch || selectedFile() != selectedFile || manager.selectedEditor?.component !== editor || AirPaneActivity.read(selectedFile)?.identity != pane?.identity) return@show
+            val returningToChat = target == "chat" && renderedTarget != "chat"
             renderedTarget = target
             updateQueueVisibility(target, pane, editor)
             retiredRecaps.toList().forEach { it.dispose() }
@@ -318,6 +327,7 @@ class ReelService(private val project: Project) : Disposable {
                     if (pane?.processing == true && editor != null) overlay.showReturnButton(editor)
                 }
             }
+            if (returningToChat) restoreComposerFocus(selectedFile, editor, epoch)
         }
     }
 
