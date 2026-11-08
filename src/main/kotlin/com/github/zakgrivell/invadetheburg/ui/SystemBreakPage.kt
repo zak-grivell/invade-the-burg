@@ -23,6 +23,8 @@ internal class SystemBreakPage(url: String, private val ownsPlaybackControls: Bo
     private var browser: WebViewComponent? = null
     private val container = JPanel(BorderLayout())
     private val mediaScript = javaClass.getResource("/browser/media-visibility.js")!!.readText()
+    private val inputScript = javaClass.getResource("/browser/input-visibility.js")!!.readText()
+    private val inputGate = BrowserInputGate()
     private val pendingScripts = mutableListOf<String>()
     private var requestedUrl = url
     private var initializing = false
@@ -71,6 +73,7 @@ internal class SystemBreakPage(url: String, private val ownsPlaybackControls: Bo
         }
         view.addOnBeforeLoad("""
             (function () {
+                ${inputScript.replace("/*ACTIVE*/", "false")}
                 window.__reelBreakOwnPlaybackControls = $ownsPlaybackControls;
                 window.__reelBreakPaneActive = false;
                 ${if (ownsPlaybackControls) "" else mediaScript.replace("/*HIDDEN*/", "true")}
@@ -135,6 +138,11 @@ internal class SystemBreakPage(url: String, private val ownsPlaybackControls: Bo
     }
     override fun setActive(active: Boolean) { this.active = active; if (!disposed) pushVisibility() }
     private fun pushVisibility() {
+        browser?.let { view ->
+            inputGate.setActive(view, active)
+            view.isVisible = active
+            view.eval(inputScript.replace("/*ACTIVE*/", active.toString()))
+        }
         if (ownsPlaybackControls) {
             // The recap owns paired playback. Generic retained-media resume could start
             // either track before the selected pane is revealed, or race a first seek.

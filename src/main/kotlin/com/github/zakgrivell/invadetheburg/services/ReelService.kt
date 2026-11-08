@@ -31,29 +31,39 @@ private val LOG = logger<ReelService>()
 @Service(Service.Level.PROJECT)
 class ReelService(private val project: Project) : Disposable {
     private val state = BreakState()
+    private val browserView = BrowserViewState()
+    private var viewEpoch = 0L
+    private var renderedTarget = "chat"
+    private var viewFile: VirtualFile? = null
+    private var viewThread: String? = null
+    private var viewEditor: javax.swing.JComponent? = null
+    private var publishedResume = false
+    private var queueAllowed: Boolean? = null
     private val transition = PaneTransition()
     private val retiredRecaps = mutableListOf<ChatRecapOverlay>()
     private val failedRecaps = mutableSetOf<VirtualFile>()
     private val completions = CompletionTracker()
     private val completedQueue = CompletedAgentQueue()
     private var queueFiles = emptyMap<String, VirtualFile>()
-    private val queueListeners = mutableSetOf<(List<CompletedAgent>) -> Unit>()
+    private val queueListeners = mutableSetOf<(QueueView) -> Unit>()
     private var publishedQueue = emptyList<CompletedAgent>()
 
-    internal fun onQueueChanged(listener: (List<CompletedAgent>) -> Unit): () -> Unit {
+    internal fun onQueueChanged(listener: (QueueView) -> Unit): () -> Unit {
         queueListeners.add(listener)
-        listener(completedQueue.entries)
+        listener(QueueView(completedQueue.entries, selectedThread() != null))
         return { queueListeners.remove(listener) }
     }
     private fun publishQueue() {
         val entries = completedQueue.entries
-        if (entries == publishedQueue) return
-        val added = entries.any { entry -> publishedQueue.none { it.id == entry.id } }
+        val canResume = selectedThread() != null
+        if (entries == publishedQueue && canResume == publishedResume) return
+        publishedResume = canResume
         publishedQueue = entries
-        queueListeners.toList().forEach { it(entries) }
-        if (added) com.intellij.openapi.wm.ToolWindowManager.getInstance(project).getToolWindow("Completed agents")?.show()
+        queueListeners.toList().forEach { it(QueueView(entries, canResume)) }
     }
-    private fun selectedThread(): String? = AirPaneActivity.read(FileEditorManager.getInstance(project).selectedFiles.firstOrNull())?.identity
+    private fun selectedFile(): VirtualFile? = com.intellij.openapi.fileEditor.ex.FileEditorManagerEx.getInstanceEx(project).currentWindow?.selectedFile
+        ?: FileEditorManager.getInstance(project).selectedFiles.firstOrNull()
+    private fun selectedThread(): String? = AirPaneActivity.read(selectedFile())?.identity
     private fun openQueued(thread: String?) {
         val file = queueFiles[thread] ?: return
         val manager = FileEditorManager.getInstance(project)
@@ -115,7 +125,7 @@ class ReelService(private val project: Project) : Disposable {
     private val timer = Timer(200) { pollPane() }
     private val overlay = ReelOverlay(
         dismiss = { dismiss() },
-        resume = { state.resume(); etaGuard { eta?.forceBreak() }; pollPane() },
+        resume = { resumeScrolling() },
         settings = { ShowSettingsUtil.getInstance().showSettingsDialog(project, ReelSettingsConfigurable::class.java) }
     )
     private var disposed = false
@@ -136,14 +146,20 @@ class ReelService(private val project: Project) : Disposable {
                 object : com.intellij.openapi.fileEditor.FileEditorManagerListener {
                     override fun selectionChanged(event: com.intellij.openapi.fileEditor.FileEditorManagerEvent) {
                         completedQueue.selectionChanged(AirPaneActivity.read(event.newFile)?.identity)
+                        suspendForNavigation(event.newFile)
                     }
                 })
         }
         timer.start(); startEtaHistory(); pollPane()
     }
+    fun resumeScrolling() {
+        if (selectedThread() == null) return
+        browserView.resume(); state.resume(); etaGuard { eta?.forceBreak() }; pollPane()
+    }
     fun dismiss() {
+        browserView.suspend()
         state.dismiss()
-        val file = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()
+        val file = selectedFile()
         if (file != null && AirPaneActivity.read(file)?.completed == true) {
             AirPaneActivity.read(file)?.identity?.let { pendingRecaps.remove(it) }
             clearRecap(file)
@@ -152,9 +168,48 @@ class ReelService(private val project: Project) : Disposable {
         pollPane()
     }
 
+    private fun suspendForNavigation(file: VirtualFile?) {
+        val hadBrowser = renderedTarget == "break" || renderedTarget == "recap"
+        val epoch = ++viewEpoch
+        browserView.viewChanged(AirPaneActivity.read(file)?.processing == true)
+        transition.dispose()
+        overlay.hide()
+        recapViews.values.forEach { it.hide() }
+        renderedTarget = "chat"
+        val manager = FileEditorManager.getInstance(project)
+        viewFile = file
+        viewThread = AirPaneActivity.read(file)?.identity
+        viewEditor = manager.selectedEditor?.component
+        javax.swing.SwingUtilities.invokeLater {
+            if (disposed || project.isDisposed || epoch != viewEpoch || selectedFile() != file) return@invokeLater
+            if (hadBrowser) {
+                val editor = manager.selectedEditor
+                val preferred = editor?.preferredFocusedComponent
+                val focus = com.github.zakgrivell.invadetheburg.ui.chatFocusTarget(preferred, editor?.component)
+                if (focus != null) com.intellij.openapi.wm.IdeFocusManager.getInstance(project).requestFocus(focus, true)
+            }
+            pollPane()
+        }
+    }
+    private fun updateQueueVisibility(target: String, pane: PaneActivity?, editor: javax.swing.JComponent?) {
+        val window = com.intellij.openapi.wm.ToolWindowManager.getInstance(project).getToolWindow("Completed agents") ?: return
+        val allowed = queueVisibleFor(target, pane, editor?.isShowing == true)
+        val entering = queueAllowed != allowed
+        queueAllowed = allowed
+        if (window.isAvailable != allowed) window.setAvailable(allowed, null)
+        if (!allowed && window.isVisible) window.hide()
+        if (allowed && entering && !window.isVisible) window.show()
+    }
+
     private fun pollPane() {
         if (disposed || project.isDisposed) return
         val manager = FileEditorManager.getInstance(project)
+        val currentFile = selectedFile()
+        val currentEditor = manager.selectedEditor?.component
+        if (viewFile != currentFile || viewThread != AirPaneActivity.read(currentFile)?.identity || viewEditor !== currentEditor) {
+            suspendForNavigation(currentFile)
+            return
+        }
         val panes = manager.openFiles.mapNotNull { file -> AirPaneActivity.read(file)?.let { file to it } }.distinctBy { it.second.identity }
         queueFiles = panes.associate { (file, activity) -> activity.identity to file }
         val advanceTo = completedQueue.observe(panes.map { (file, activity) -> QueuePane(activity, file.presentableName) }, selectedThread(), System.nanoTime() / 1_000_000)
@@ -200,13 +255,14 @@ class ReelService(private val project: Project) : Disposable {
                 }
             }
         }
-        val selectedFile = manager.selectedFiles.firstOrNull()
+        val selectedFile = selectedFile()
         val pane = AirPaneActivity.read(selectedFile)
         val editor = manager.selectedEditor?.component
         eta?.let { monitor -> etaGuard { monitor.observe(pane, System.currentTimeMillis()) } }
         val view = etaView()
         overlay.setEtaBadge(view?.badge)
-        val showBreak = state.update(pane) && view?.action != EtaAction.SKIP_BREAK
+        val allowedByView = browserView.showBrowser(pane)
+        val showBreak = allowedByView && (state.update(pane) || pane?.processing != true) && (view?.action != EtaAction.SKIP_BREAK || pane?.processing != true)
         val always = service<ReelSettings>().recapMode == RecapMode.ALWAYS
         val selectedRecap = recapViews[selectedFile]
         val waiting = always && pane?.completed == true && selectedFile !in failedRecaps &&
@@ -226,8 +282,14 @@ class ReelService(private val project: Project) : Disposable {
             selectedRecap != null -> "recap"
             else -> "chat"
         }
+        if (target == "break") updateQueueVisibility(target, pane, editor)
+        if (target != "break") overlay.pauseMedia()
+        val epoch = viewEpoch
         val key: Any = if (target == "chat") "chat" else Triple(selectedFile, target, if (target == "recap") selectedRecap else null)
         transition.show(key, editor) {
+            if (epoch != viewEpoch || selectedFile() != selectedFile || manager.selectedEditor?.component !== editor || AirPaneActivity.read(selectedFile)?.identity != pane?.identity) return@show
+            renderedTarget = target
+            updateQueueVisibility(target, pane, editor)
             retiredRecaps.toList().forEach { it.dispose() }
             retiredRecaps.clear()
             renderSelectedRecap(recapViews.values, if (target == "recap") selectedRecap else null, editor)

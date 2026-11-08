@@ -13,10 +13,15 @@ class CompletedAgentsPanelTest {
     @Test fun `sidebar actions preserve selected identity when other agents finish or move`() {
         SwingUtilities.invokeAndWait {
             val calls = mutableListOf<String>()
-            val panel = CompletedAgentsPanel({ calls.add("review:$it") }, { calls.add("remove:$it") }, { id, direction -> calls.add("move:$id:$direction") }, { calls.add("next") })
+            val panel = CompletedAgentsPanel({ calls.add("review:$it") }, { calls.add("remove:$it") }, { id, direction -> calls.add("move:$id:$direction") }, { calls.add("next") }, { calls.add("resume") })
             val components = all(panel)
             val list = components.filterIsInstance<JList<*>>().single()
             fun button(text: String) = components.filterIsInstance<JButton>().single { it.text == text }
+            panel.setResumeAvailable(false)
+            assertFalse(button("Resume scrolling").isEnabled)
+            panel.setResumeAvailable(true)
+            button("Resume scrolling").doClick()
+            assertEquals("resume", calls.removeAt(0))
             assertFalse(button("Review next").isEnabled)
             val a = CompletedAgent("a:1", "a", "Agent A", 62000, false)
             val b = CompletedAgent("b:1", "b", "Agent B", 3000, false)

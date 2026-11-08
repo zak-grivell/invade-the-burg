@@ -11,6 +11,7 @@
 - Local MP4/WebM or online background video, readiness-gated playback, and per-chat recap notifications.
 
 ### Fixed
+- Hide the completed-agent sidebar during scrolling, add Resume scrolling in chat/recaps, and suspend native browser input immediately on thread or editor changes.
 - Recover policy-blocked videos on all configured sites with one muted inline retry.
 - Start new documents paused until the IDE supplies pane visibility, including codec failures during startup.
 - Detect native media errors and let explicit retry select a playable declared source without resetting blob/MediaSource streams.

@@ -13,12 +13,14 @@ import java.awt.BorderLayout
 import javax.swing.*
 
 class CompletedAgentsToolWindow : ToolWindowFactory {
+    override fun init(toolWindow: ToolWindow) { toolWindow.setAvailable(false, null) }
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val service = project.service<ReelService>()
-        val panel = CompletedAgentsPanel(service::reviewCompleted, service::removeCompleted, service::moveCompleted, service::reviewNextCompleted)
-        val subscription = service.onQueueChanged { entries ->
-            panel.update(entries)
-            toolWindow.title = "Completed agents (${entries.size})"
+        val panel = CompletedAgentsPanel(service::reviewCompleted, service::removeCompleted, service::moveCompleted, service::reviewNextCompleted, service::resumeScrolling)
+        val subscription = service.onQueueChanged { view ->
+            panel.update(view.entries)
+            panel.setResumeAvailable(view.canResume)
+            toolWindow.title = "Completed agents (${view.entries.size})"
         }
         val content = ContentFactory.getInstance().createContent(panel, "", false)
         content.setDisposer(Disposable { subscription() })
@@ -32,7 +34,8 @@ internal class CompletedAgentsPanel(
     private val review: (String) -> Unit,
     private val remove: (String) -> Unit,
     private val move: (String, Int) -> Unit,
-    next: () -> Unit
+    next: () -> Unit,
+    resume: () -> Unit = {}
 ) : JPanel(BorderLayout(0, 8)) {
     private val model = DefaultListModel<CompletedAgent>()
     private val list = JList(model).apply {
@@ -55,6 +58,8 @@ internal class CompletedAgentsPanel(
     private val discard = JButton("Remove from queue").apply { addActionListener { selected()?.let { remove(it.id) } } }
     private val up = JButton("Move up").apply { addActionListener { selected()?.let { move(it.id, -1) } } }
     private val down = JButton("Move down").apply { addActionListener { selected()?.let { move(it.id, 1) } } }
+    private val resumeButton = JButton("Resume scrolling").apply { addActionListener { resume() } }
+    fun setResumeAvailable(value: Boolean) { resumeButton.isEnabled = value }
     private val nextButton = JButton("Review next").apply { addActionListener { next() } }
     init {
         border = BorderFactory.createEmptyBorder(8, 8, 8, 8)
@@ -63,7 +68,7 @@ internal class CompletedAgentsPanel(
             add(JLabel("Finish order · reorder with Move up / Move down"), BorderLayout.SOUTH)
         }, BorderLayout.NORTH)
         add(JPanel(BorderLayout()).apply { add(empty, BorderLayout.NORTH); add(JScrollPane(list), BorderLayout.CENTER) }, BorderLayout.CENTER)
-        add(JPanel(java.awt.GridLayout(0, 2, 6, 6)).apply { listOf(open, done, discard, up, down).forEach { add(it) } }, BorderLayout.SOUTH)
+        add(JPanel(java.awt.GridLayout(0, 2, 6, 6)).apply { listOf(open, done, discard, up, down, resumeButton).forEach { add(it) } }, BorderLayout.SOUTH)
         list.addListSelectionListener { refreshButtons() }
         list.inputMap.put(KeyStroke.getKeyStroke("ENTER"), "review")
         list.actionMap.put("review", object : AbstractAction() { override fun actionPerformed(e: java.awt.event.ActionEvent?) { open.doClick() } })
