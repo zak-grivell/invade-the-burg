@@ -49,13 +49,15 @@ class ReelService(private val project: Project) : Disposable {
     private var publishedQueue = emptyList<CompletedAgent>()
 
     internal fun onQueueChanged(listener: (QueueView) -> Unit): () -> Unit {
+        completedQueue.pinActive(selectedThread())
         queueListeners.add(listener)
         listener(QueueView(completedQueue.entries, selectedThread()))
         return { queueListeners.remove(listener) }
     }
     private fun publishQueue() {
-        val entries = completedQueue.entries
         val activeThread = selectedThread()
+        completedQueue.pinActive(activeThread)
+        val entries = completedQueue.entries
         if (entries == publishedQueue && activeThread == publishedActiveThread) return
         publishedActiveThread = activeThread
         publishedQueue = entries
@@ -72,7 +74,7 @@ class ReelService(private val project: Project) : Disposable {
     }
     fun reviewCompleted(id: String) { openQueued(completedQueue.review(id)); publishQueue(); pollPane() }
     fun removeCompleted(id: String) { openQueued(completedQueue.remove(id, selectedThread())); publishQueue(); pollPane() }
-    fun reorderCompleted(id: String, targetId: String, after: Boolean) { completedQueue.reorder(id, targetId, after); publishQueue() }
+    fun reorderCompleted(id: String, targetId: String, after: Boolean) { completedQueue.reorder(id, targetId, after, selectedThread()); publishQueue() }
     private val narrator = ChatNarrator(project)
     private val recapViews = mutableMapOf<VirtualFile, ChatRecapOverlay>()
     private val recapOffers = mutableMapOf<VirtualFile, Notification>()
@@ -176,6 +178,7 @@ class ReelService(private val project: Project) : Disposable {
         viewFile = file
         viewThread = AirPaneActivity.read(file)?.identity
         viewEditor = manager.selectedEditor?.component
+        publishQueue()
         javax.swing.SwingUtilities.invokeLater {
             if (disposed || project.isDisposed || epoch != viewEpoch || selectedFile() != file) return@invokeLater
             if (hadBrowser) {

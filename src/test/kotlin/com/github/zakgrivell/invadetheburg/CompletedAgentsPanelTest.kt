@@ -54,7 +54,7 @@ class CompletedAgentsPanelTest {
             val moves = mutableListOf<Triple<String, String, Boolean>>()
             val panel = CompletedAgentsPanel({ fail("Drag opened $it") }, { fail("Drag removed $it") }, { id, target, after -> moves.add(Triple(id, target, after)) })
             val entries = listOf("a", "b", "c").map { CompletedAgent("$it:1", it, "Agent $it", 1000, false) }
-            panel.update(entries, "a")
+            panel.update(entries)
             panel.setSize(420, 240); layout(panel)
             assertFalse(panel.actionMap.get("cancelDrag").isEnabled) // Leave normal IDE Escape handling alone.
             fun open(id: String) = all(panel).filterIsInstance<JButton>().single { it.text.startsWith("Agent $id") }
@@ -72,7 +72,7 @@ class CompletedAgentsPanelTest {
             mouse(a, MouseEvent.MOUSE_PRESSED)
             val p = SwingUtilities.convertPoint(c, Point(20, c.height - 1), a)
             mouse(a, MouseEvent.MOUSE_DRAGGED, p)
-            panel.update(entries + CompletedAgent("d:1", "d", "Agent d", 500, false), "a")
+            panel.update(entries + CompletedAgent("d:1", "d", "Agent d", 500, false))
             layout(panel)
             mouse(a, MouseEvent.MOUSE_RELEASED, p)
             assertEquals(Triple("a:1", "c:1", true), moves.last())
@@ -86,6 +86,26 @@ class CompletedAgentsPanelTest {
             panel.update(entries.drop(1), "b"); layout(panel)
             mouse(a, MouseEvent.MOUSE_RELEASED, p)
             assertEquals(3, moves.size)
+        }
+    }
+    @Test fun `dragging respects pinned current and cancels when the editor pane changes`() {
+        SwingUtilities.invokeAndWait {
+            val moves = mutableListOf<Triple<String, String, Boolean>>()
+            val panel = CompletedAgentsPanel({ fail("Drag opened $it") }, { fail("Drag removed $it") }, { id, target, after -> moves.add(Triple(id, target, after)) })
+            val entries = listOf("a", "b", "c").map { CompletedAgent("$it:1", it, "Agent $it", 1000, false) }
+            panel.update(entries, "a"); panel.setSize(420, 240); layout(panel)
+            fun open(id: String) = all(panel).filterIsInstance<JButton>().single { it.text.startsWith("Agent $id") }
+            val a = open("a"); val c = open("c")
+            val aboveA = SwingUtilities.convertPoint(a, Point(20, 1), c)
+            mouse(c, MouseEvent.MOUSE_PRESSED); mouse(c, MouseEvent.MOUSE_DRAGGED, aboveA); mouse(c, MouseEvent.MOUSE_RELEASED, aboveA)
+            assertEquals(listOf(Triple("c:1", "a:1", true)), moves)
+            val belowC = SwingUtilities.convertPoint(c, Point(20, c.height - 1), a)
+            mouse(a, MouseEvent.MOUSE_PRESSED); mouse(a, MouseEvent.MOUSE_DRAGGED, belowC); mouse(a, MouseEvent.MOUSE_RELEASED, belowC)
+            assertEquals(1, moves.size)
+            mouse(c, MouseEvent.MOUSE_PRESSED); mouse(c, MouseEvent.MOUSE_DRAGGED, aboveA)
+            panel.update(listOf(entries[1], entries[0], entries[2]), "b"); layout(panel)
+            mouse(c, MouseEvent.MOUSE_RELEASED, aboveA)
+            assertEquals(1, moves.size)
         }
     }
 }

@@ -44,6 +44,7 @@ internal class CompletedAgentsPanel(
     private data class Drag(val id: String, val start: Point, var moving: Boolean = false)
     private var drag: Drag? = null
     private var drop: Drop? = null
+    private var activeId: String? = null
     private fun cancelDrag() {
         drag = null
         drop = null
@@ -54,7 +55,7 @@ internal class CompletedAgentsPanel(
         if (point.x !in 0 until list.width || point.y < 0 || !viewport.viewRect.contains(point)) return null
         val ordered = list.components.filterIsInstance<Row>()
         val row = ordered.firstOrNull { point.y < it.y + it.height } ?: ordered.lastOrNull() ?: return null
-        return Drop(row.id, point.y >= row.y + row.height / 2)
+        return Drop(row.id, row.id == activeId || point.y >= row.y + row.height / 2)
     }
     private fun dragListener(id: String) = object : MouseInputAdapter() {
         override fun mousePressed(e: MouseEvent) {
@@ -70,15 +71,15 @@ internal class CompletedAgentsPanel(
             rows[id]?.open?.let {
                 it.model.isArmed = false
                 it.model.isPressed = false
-                it.cursor = Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR)
+                it.cursor = Cursor.getPredefinedCursor(if (id == activeId) Cursor.DEFAULT_CURSOR else Cursor.MOVE_CURSOR)
             }
             list.scrollRectToVisible(Rectangle(point.x, (point.y - 16).coerceAtLeast(0), 1, 32))
-            drop = destination(point)
+            drop = if (id == activeId) null else destination(point)
             list.repaint()
         }
         override fun mouseReleased(e: MouseEvent) {
             val gesture = drag?.takeIf { it.id == id } ?: return
-            val target = if (gesture.moving) destination(SwingUtilities.convertPoint(e.component, e.point, list)) else null
+            val target = if (gesture.moving && id != activeId) destination(SwingUtilities.convertPoint(e.component, e.point, list)) else null
             cancelDrag()
             if (target != null) reorder(id, target.targetId, target.after)
         }
@@ -107,7 +108,7 @@ internal class CompletedAgentsPanel(
         }
         fun update(entry: CompletedAgent, active: Boolean) {
             open.text = "${entry.name}  ·  ${promptDuration(entry)}" + if (active) "  (Current)" else ""
-            open.toolTipText = entry.name + (if (entry.partial) " — observed time; prompt was already running" else " — elapsed prompt time") + "; drag to reorder"
+            open.toolTipText = entry.name + (if (entry.partial) " — observed time; prompt was already running" else " — elapsed prompt time") + if (active) "; current thread stays first" else "; drag to reorder"
             close.accessibleContext.accessibleName = "Remove ${entry.name} from queue"
             background = UIManager.getColor(if (active) "List.selectionBackground" else "List.background")
             open.foreground = UIManager.getColor(if (active) "List.selectionForeground" else "List.foreground")
@@ -143,7 +144,9 @@ internal class CompletedAgentsPanel(
     }
     fun update(entries: List<CompletedAgent>, activeThread: String? = null) {
         val live = entries.map { it.id }.toSet()
-        if (drag?.id?.let { it !in live } == true) cancelDrag()
+        val nextActive = entries.firstOrNull { it.thread == activeThread }?.id
+        if (activeId != nextActive || drag?.id?.let { it !in live } == true) cancelDrag()
+        activeId = nextActive
         rows.keys.filter { it !in live }.forEach { id -> list.remove(rows.remove(id)) }
         entries.forEachIndexed { index, entry ->
             val row = rows.getOrPut(entry.id) { Row(entry.id).also { list.add(it) } }

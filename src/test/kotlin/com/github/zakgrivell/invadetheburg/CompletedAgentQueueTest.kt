@@ -14,16 +14,16 @@ class CompletedAgentQueueTest {
         observe(listOf(pane("a", "READY"), pane("b", "PROCESSING")), "a", 1100)
         observe(listOf(pane("a", "READY"), pane("b", "READY")), "a", 2100)
     }
-    @Test fun `completion order and per-prompt duration survive polling and tab switching`() {
+    @Test fun `background finish order and per-prompt duration survive polling`() {
         val q = started()
         q.observe(listOf(pane("a", "PROCESSING"), pane("b", "READY")), "a", 1100)
         q.observe(listOf(pane("a", "READY"), pane("b", "READY")), "b", 2100)
-        repeat(10) { q.observe(listOf(pane("b", "READY"), pane("a", "READY")), if (it % 2 == 0) "b" else "a", 3100) }
+        repeat(10) { q.observe(listOf(pane("b", "READY"), pane("a", "READY")), null, 3100) }
         assertEquals(listOf("b", "a"), q.entries.map { it.thread })
         assertEquals(listOf(1000L, 2000L), q.entries.map { it.elapsedMs })
         assertTrue(q.entries.none { it.partial })
         val ids = q.entries.map { it.id }
-        q.observe(listOf(pane("a", "READY"), QueuePane(pane("b", "READY").activity, "Renamed agent")), "a", 4000)
+        q.observe(listOf(pane("a", "READY"), QueuePane(pane("b", "READY").activity, "Renamed agent")), null, 4000)
         assertEquals(ids, q.entries.map { it.id })
         assertEquals("Renamed agent", q.entries.first().name)
     }
@@ -63,9 +63,9 @@ class CompletedAgentQueueTest {
         assertEquals(listOf("b"), q.entries.map { it.thread })
         q.observe(listOf(pane("a", "PROCESSING"), pane("b", "READY")), "a", 3000)
         q.observe(listOf(pane("a", "READY"), pane("b", "READY")), "a", 5000)
-        assertEquals(listOf("b", "a"), q.entries.map { it.thread })
-        assertNotEquals(oldId, q.entries.last().id)
-        assertEquals(2000L, q.entries.last().elapsedMs)
+        assertEquals(listOf("a", "b"), q.entries.map { it.thread })
+        assertNotEquals(oldId, q.entries.first().id)
+        assertEquals(2000L, q.entries.first().elapsedMs)
         q.remove(oldId, "a")
         assertEquals(2, q.entries.size)
     }
@@ -134,6 +134,31 @@ class CompletedAgentQueueTest {
         val background = completed()
         assertNull(background.remove(background.entries.last().id, "a"))
         assertEquals(listOf("a"), background.entries.map { it.thread })
+    }
+    @Test fun `open pane stays first while waiting results retain drag order across polls and tab switches`() {
+        val q = completed()
+        val panes = listOf(pane("a", "READY"), pane("b", "READY"), pane("c", "PROCESSING"), pane("d", "PROCESSING"))
+        q.observe(panes, "a", 3000)
+        val ready = panes.map { pane(it.activity.identity, "READY") }
+        q.observe(ready, "a", 4000)
+        val byThread = q.entries.associateBy { it.thread }
+        val a = byThread.getValue("a"); val b = byThread.getValue("b")
+        val c = byThread.getValue("c"); val d = byThread.getValue("d")
+        q.reorder(d.id, b.id, false, "a")
+        assertEquals(listOf(a, d, b, c), q.entries)
+        q.reorder(c.id, a.id, false, "a") // Dropping above Current inserts immediately below it.
+        assertEquals(listOf(a, c, d, b), q.entries)
+        q.reorder(a.id, b.id, true, "a") // Current cannot be dragged away from first.
+        repeat(5) { assertNull(q.observe(ready, "a", 5000)) }
+        assertEquals(listOf(a, c, d, b), q.entries)
+        assertNull(q.observe(ready, "d", 5100)) // Native editor-tab selection, without a queue click.
+        assertEquals(listOf(d, a, c, b), q.entries)
+        assertNull(q.observe(ready, null, 5200)) // A regular code pane does not manufacture a queue entry.
+        assertEquals(listOf(d, a, c, b), q.entries)
+        q.pinActive("b")
+        assertEquals(listOf(b, d, a, c), q.entries)
+        assertEquals("d", q.observe(ready.map { if (it.activity.identity == "b") pane("b", "PROCESSING") else it }, "b", 5300))
+        assertEquals(listOf(d, a, c), q.entries)
     }
     @Test fun `cancelled or unknown runs do not become successful queued completions`() {
         val q = started()

@@ -37,10 +37,15 @@ internal class CompletedAgentQueue {
             }
         }
         observed = panes.associate { it.activity.identity to it.activity.activity }
+        pinActive(selected)
         return if (advance) reviewNext() else null
     }
 
     fun reviewNext(): String? = pending.firstOrNull()?.thread
+    fun pinActive(thread: String?) {
+        val index = pending.indexOfFirst { it.thread == thread }
+        if (index > 0) pending.add(0, pending.removeAt(index))
+    }
     fun review(id: String): String? {
         val index = pending.indexOfFirst { it.id == id }
         if (index < 0) return null
@@ -49,13 +54,16 @@ internal class CompletedAgentQueue {
         return entry.thread
     }
     /** Anchor to a live completion, so a stale drop cannot reorder a later prompt on that thread. */
-    fun reorder(id: String, targetId: String, after: Boolean) {
+    fun reorder(id: String, targetId: String, after: Boolean, selected: String? = null) {
+        pinActive(selected)
         if (id == targetId) return
         val entry = pending.find { it.id == id } ?: return
+        if (entry.thread == selected) return
         if (pending.none { it.id == targetId }) return
         pending.remove(entry)
         val target = pending.indexOfFirst { it.id == targetId }
         pending.add(target + if (after) 1 else 0, entry)
+        pinActive(selected)
     }
     fun remove(id: String, selected: String?): String? {
         val entry = pending.find { it.id == id } ?: return null
