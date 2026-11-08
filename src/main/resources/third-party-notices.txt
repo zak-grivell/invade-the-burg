@@ -23,7 +23,3 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 Additional bundled upstream notices are included in the WebView dependency JAR.
-
-Recap background placeholder: MDN CC0 flower video
-Streamed from https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4
-Not bundled in the plugin; replaceable with user-supplied gameplay.

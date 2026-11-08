@@ -21,7 +21,6 @@ import javax.swing.table.DefaultTableModel
 class ReelSettingsConfigurable(private val settingsProvider: () -> ReelSettings = { service<ReelSettings>() }) : SearchableConfigurable {
     private var presetPicker: javax.swing.JComboBox<String>? = null
     private var recapMode: javax.swing.JComboBox<RecapMode>? = null
-    private var videoSource: JBTextField? = null
     private var voiceId: JBTextField? = null
     private var urlField: JBTextField? = null
     private var etaCheckBox: JCheckBox? = null
@@ -95,19 +94,15 @@ class ReelSettingsConfigurable(private val settingsProvider: () -> ReelSettings 
             }, BorderLayout.SOUTH)
         }
         val mode = javax.swing.JComboBox(RecapMode.entries.toTypedArray()).also { recapMode = it; it.selectedItem = settings.recapMode }
-        val video = JBTextField(settings.recapVideoSource).also { videoSource = it }
         val voice = JBTextField(settings.narrationVoiceId).also { voiceId = it }
         val recapForm = form().apply {
             row("Show recap:", mode)
             row("", JBLabel("<html>Ask offers a recap after each turn. Always opens it automatically.<br>Never turns recaps off.</html>"))
-            row("Background video:", video)
-            row("", JBLabel("<html>A complete video URL or an absolute path to a local video.</html>"))
             row("Voice ID:", voice)
             row("", JBLabel("<html>Uses the hosted narration service; no local API key is needed.<br>Completed responses are sent through the service to ElevenLabs.</html>"))
         }
         fun updateRecapFields() {
             val enabled = mode.selectedItem != RecapMode.NEVER
-            video.isEnabled = enabled
             voice.isEnabled = enabled
         }
         mode.addActionListener { updateRecapFields() }
@@ -164,12 +159,11 @@ class ReelSettingsConfigurable(private val settingsProvider: () -> ReelSettings 
     override fun isModified(): Boolean {
         if (urlField == null) return false
         val settings = settingsProvider()
-        return etaCheckBox?.isSelected != settings.useEtaToTimeBreaks || videoSource?.text?.trim() != settings.recapVideoSource || recapMode?.selectedItem != settings.recapMode || voiceId?.text?.trim() != settings.narrationVoiceId || urlField?.text?.trim() != settings.url || readFavorites() != settings.favorites || favoritesTable?.isEditing == true
+        return etaCheckBox?.isSelected != settings.useEtaToTimeBreaks || recapMode?.selectedItem != settings.recapMode || voiceId?.text?.trim() != settings.narrationVoiceId || urlField?.text?.trim() != settings.url || readFavorites() != settings.favorites || favoritesTable?.isEditing == true
     }
     override fun reset() {
         favoritesTable?.cellEditor?.cancelCellEditing()
         val settings = settingsProvider()
-        videoSource?.text = settings.recapVideoSource
         recapMode?.selectedItem = settings.recapMode
         voiceId?.text = settings.narrationVoiceId
         urlField?.text = settings.url
@@ -186,10 +180,9 @@ class ReelSettingsConfigurable(private val settingsProvider: () -> ReelSettings 
         try {
             val url = normalizeBreakUrl(value)
             val favorites = normalizeFavorites(readFavorites())
-            val video = com.github.zakgrivell.invadetheburg.ui.normalizeRecapVideo(videoSource?.text.orEmpty())
-            settingsProvider().let { etaCheckBox?.let { box -> it.useEtaToTimeBreaks = box.isSelected }; it.recapVideoSource = video; it.url = url; it.favorites = favorites; it.recapMode = recapMode?.selectedItem as? RecapMode ?: RecapMode.ASK; it.narrationVoiceId = voiceId?.text.orEmpty() }
+            settingsProvider().let { etaCheckBox?.let { box -> it.useEtaToTimeBreaks = box.isSelected }; it.url = url; it.favorites = favorites; it.recapMode = recapMode?.selectedItem as? RecapMode ?: RecapMode.ASK; it.narrationVoiceId = voiceId?.text.orEmpty() }
         }
         catch (error: IllegalArgumentException) { throw ConfigurationException(error.message ?: "Invalid URL") }
     }
-    override fun disposeUIResources() { presetPicker = null; etaCheckBox = null; videoSource = null; recapMode = null; voiceId = null; urlField = null; favoritesTable = null; favoritesModel = null }
+    override fun disposeUIResources() { presetPicker = null; etaCheckBox = null; recapMode = null; voiceId = null; urlField = null; favoritesTable = null; favoritesModel = null }
 }

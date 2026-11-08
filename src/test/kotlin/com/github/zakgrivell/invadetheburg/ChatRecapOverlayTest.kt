@@ -30,7 +30,7 @@ class ChatRecapOverlayTest {
                 override fun setActive(value: Boolean) { active = value; if (value) activations++ }
                 override fun dispose() { disposed = true }
             }
-            val media = RecapMedia("Response", ByteArray(20), DEFAULT_RECAP_VIDEO)
+            val media = RecapMedia("Response", ByteArray(20))
             val overlay = ChatRecapOverlay(media, { completions++ }, { fake })
             try {
                 overlay.showOver(editor)
@@ -64,7 +64,7 @@ class ChatRecapOverlayTest {
             root.contentPane.add(editor)
             var created = 0
             var activePages = 0
-            fun recap() = ChatRecapOverlay(RecapMedia("Response", ByteArray(20), DEFAULT_RECAP_VIDEO), {}, {
+            fun recap() = ChatRecapOverlay(RecapMedia("Response", ByteArray(20)), {}, {
                 created++
                 object : BreakPage {
                     override val component = JPanel()

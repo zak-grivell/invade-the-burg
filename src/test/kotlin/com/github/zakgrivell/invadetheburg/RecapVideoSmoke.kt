@@ -8,7 +8,7 @@ import javax.swing.SwingUtilities
 
 object RecapVideoSmoke {
     @JvmStatic fun main(args: Array<String>) {
-        val media = RecapMedia("Okay, quick chat recap! The agent added a video underneath your summary. Your gameplay can replace this stock clip in Settings.", ByteArray(48000 * 10), args.firstOrNull() ?: DEFAULT_RECAP_VIDEO)
+        val media = RecapMedia("Your response plays over the bundled original gameplay recording.", ByteArray(48000 * 15))
         lateinit var page: SystemBreakPage
         lateinit var frame: JFrame
         lateinit var editor: JPanel
@@ -52,7 +52,7 @@ object RecapVideoSmoke {
                     playing = eval("return !voice.paused && voice.currentTime > 0.1 && !video.paused && video.currentTime > 0.1 ? 1 : 0;") == "1"
                 }
             }
-            check(playing) { "Voice and online stock video did not play together" }
+            check(playing) { "Voice and bundled gameplay video did not play together" }
             println("PASS: native browser autoplays unmuted narration and footage without a click")
             SwingUtilities.invokeAndWait { overlay.hide() }
             Thread.sleep(300)

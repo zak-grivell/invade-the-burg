@@ -8,6 +8,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ReelSettingsTest {
+    @Test fun `legacy video configuration is ignored while recap mode and voice survive migration`() {
+        val xml = org.jdom.Element("state")
+        fun option(name: String, value: String) { xml.addContent(org.jdom.Element("option").setAttribute("name", name).setAttribute("value", value)) }
+        option("recapVideoSource", "/missing/old-gameplay.mp4")
+        option("recapMode", "ALWAYS")
+        option("narrationVoiceId", "voice_123")
+        val restored = ReelSettings().apply { loadState(com.intellij.util.xmlb.XmlSerializer.deserialize(xml, ReelSettings.Options::class.java)) }
+        assertEquals(com.github.zakgrivell.invadetheburg.settings.RecapMode.ALWAYS, restored.recapMode)
+        assertEquals("voice_123", restored.narrationVoiceId)
+    }
     @Test fun `all five presets are available on new and existing installations`() {
         val settings = ReelSettings()
         val names = listOf("X", "Instagram Reels", "TikTok", "LeetCode", "Duolingo")

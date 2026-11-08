@@ -37,7 +37,6 @@ internal class ChatNarrator(private val project: Project) : Disposable {
         val settings = service<ReelSettings>()
         if (settings.recapMode == RecapMode.NEVER || closed) return
         val configuredVoice = settings.narrationVoiceId
-        val videoSource = settings.recapVideoSource
         val autoPlay = true // Both Always and an accepted recap offer explicitly request playback.
         executor.submit {
             try {
@@ -57,7 +56,7 @@ internal class ChatNarrator(private val project: Project) : Disposable {
                     audio.write(response.body())
                 }
                 if (!closed) {
-                    val media = RecapMedia(text, audio.toByteArray(), videoSource, autoPlay)
+                    val media = RecapMedia(text, audio.toByteArray(), autoPlay)
                     ApplicationManager.getApplication().invokeLater {
                         if (closed || project.isDisposed || service<ReelSettings>().recapMode == RecapMode.NEVER || !stillWanted()) media.close()
                         else onReady(media)
