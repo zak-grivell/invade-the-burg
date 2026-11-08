@@ -28,7 +28,7 @@ internal fun chatFocusTarget(preferred: Component?, root: Component?): Component
         if (component is javax.swing.text.JTextComponent && component.isEditable && component.isEnabled && component.isShowing) return component
         return (component as? Container)?.components?.reversed()?.firstNotNullOfOrNull(::input)
     }
-    return preferred?.let(::input) ?: root?.let(::input) ?: preferred?.takeIf { it.isShowing && it.isFocusable }
+    return preferred?.let(::input) ?: root?.let(::input) ?: preferred?.takeIf { it.isShowing && it.isEnabled && it.isFocusable }
 }
 
 /** Resolve the composer after browser hiding, and discard a handoff invalidated by navigation or a dialog. */

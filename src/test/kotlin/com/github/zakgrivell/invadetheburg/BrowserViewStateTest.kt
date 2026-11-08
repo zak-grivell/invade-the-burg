@@ -59,6 +59,8 @@ class BrowserViewStateTest {
             assertSame(composer, com.github.zakgrivell.invadetheburg.ui.chatFocusTarget(root, root))
             composer.isEnabled = false
             assertNull(com.github.zakgrivell.invadetheburg.ui.chatFocusTarget(null, root))
+            val disabled = object : JPanel() { override fun isShowing() = true }.apply { isEnabled = false; isFocusable = true }
+            assertNull(com.github.zakgrivell.invadetheburg.ui.chatFocusTarget(disabled, root))
         }
     }
     @Test fun `hidden retained browser cannot accept focus and original control states restore`() {

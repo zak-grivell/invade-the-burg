@@ -20,7 +20,7 @@ import javax.swing.*
 import javax.swing.event.MouseInputAdapter
 
 class CompletedAgentsToolWindow : ToolWindowFactory {
-    override fun init(toolWindow: ToolWindow) { toolWindow.setAvailable(false, null) }
+    override fun shouldBeAvailable(project: Project) = false
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val service = project.service<ReelService>()
         val panel = CompletedAgentsPanel(service::reviewCompleted, service::removeCompleted, service::reorderCompleted)
