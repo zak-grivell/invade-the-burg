@@ -38,3 +38,7 @@
 | 2026-11-08 | Codex | Codex/GPT | Merge PRs #16 and #17 into main via GitHub and verify both merged. | Zak explicitly approved both merges. Build/unit checks passed; Windows native playback smoke tests failed during scroll handoff and remain unresolved. |
 
 | 2026-11-08 | Codex | Codex/GPT | Reorganize settings into labelled Website, Chat recaps and Break behaviour sections above Favourites, simplify sign-in/actions, and disable unused recap inputs. Add UI persistence/ordering tests. | Zak clarified that the large favourites list belongs below quick settings. 130 Kotlin tests, build and structure checks passed; visually checked the form and Never mode in IntelliJ. Human review pending. |
+
+| 2026-11-08 | Codex | Codex/GPT | Merge settings UI PR #18 into main through GitHub and verify the merge. | Zak explicitly approved merging. GitHub accepted the merge; the CI status lookup timed out, so no claim of green remote checks. |
+
+| 2026-11-08 | Codex | Codex/GPT | Add a project-scoped completed-agent sidebar with finish-order queue, prompt durations, review/acknowledge/remove/reorder controls, and guarded automatic handoff after a new prompt. Cover tab changes, permission waits, restarts, closure, partial timing and stable UI selection. | Requested by Zak; 145 Kotlin tests, JS suites, plugin build and structure checks passed. Opened the sidebar in IntelliJ using computer use; live multi-agent completion handoffs remain unverified manually. Human review pending. |

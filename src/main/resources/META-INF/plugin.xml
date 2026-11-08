@@ -11,6 +11,7 @@
         <notificationGroup id="Reel Break Narration" displayType="BALLOON" isLogByDefault="true"/>
         <applicationConfigurable id="dev.reelbreak.settings" parentId="tools" displayName="Reel Break"
             instance="com.github.zakgrivell.invadetheburg.settings.ReelSettingsConfigurable"/>
+        <toolWindow id="Completed agents" anchor="right" factoryClass="com.github.zakgrivell.invadetheburg.ui.CompletedAgentsToolWindow"/>
         <postStartupActivity implementation="com.github.zakgrivell.invadetheburg.startup.ReelStartupActivity"/>
     </extensions>
 </idea-plugin>

@@ -35,6 +35,37 @@ class ReelService(private val project: Project) : Disposable {
     private val retiredRecaps = mutableListOf<ChatRecapOverlay>()
     private val failedRecaps = mutableSetOf<VirtualFile>()
     private val completions = CompletionTracker()
+    private val completedQueue = CompletedAgentQueue()
+    private var queueFiles = emptyMap<String, VirtualFile>()
+    private val queueListeners = mutableSetOf<(List<CompletedAgent>) -> Unit>()
+    private var publishedQueue = emptyList<CompletedAgent>()
+
+    internal fun onQueueChanged(listener: (List<CompletedAgent>) -> Unit): () -> Unit {
+        queueListeners.add(listener)
+        listener(completedQueue.entries)
+        return { queueListeners.remove(listener) }
+    }
+    private fun publishQueue() {
+        val entries = completedQueue.entries
+        if (entries == publishedQueue) return
+        val added = entries.any { entry -> publishedQueue.none { it.id == entry.id } }
+        publishedQueue = entries
+        queueListeners.toList().forEach { it(entries) }
+        if (added) com.intellij.openapi.wm.ToolWindowManager.getInstance(project).getToolWindow("Completed agents")?.show()
+    }
+    private fun selectedThread(): String? = AirPaneActivity.read(FileEditorManager.getInstance(project).selectedFiles.firstOrNull())?.identity
+    private fun openQueued(thread: String?) {
+        val file = queueFiles[thread] ?: return
+        val manager = FileEditorManager.getInstance(project)
+        if (!manager.openFiles.contains(file)) return
+        manager.openFile(file, true)
+        // Re-arm after editor-selection events from our own navigation have settled.
+        if (selectedThread() == thread) completedQueue.entries.firstOrNull { it.thread == thread }?.let { completedQueue.review(it.id) }
+    }
+    fun reviewNextCompleted() { openQueued(completedQueue.reviewNext()); publishQueue(); pollPane() }
+    fun reviewCompleted(id: String) { openQueued(completedQueue.review(id)); publishQueue(); pollPane() }
+    fun removeCompleted(id: String) { openQueued(completedQueue.remove(id, selectedThread())); publishQueue(); pollPane() }
+    fun moveCompleted(id: String, offset: Int) { completedQueue.move(id, offset); publishQueue() }
     private val narrator = ChatNarrator(project)
     private val recapViews = mutableMapOf<VirtualFile, ChatRecapOverlay>()
     private val recapOffers = mutableMapOf<VirtualFile, Notification>()
@@ -96,7 +127,20 @@ class ReelService(private val project: Project) : Disposable {
     private var etaFailureLogged = false
     private var etaHistoryRequested = false
 
-    fun start() { if (!disposed && !timer.isRunning) { timer.start(); startEtaHistory(); pollPane() } }
+    private var queueSelectionConnected = false
+    fun start() {
+        if (disposed || timer.isRunning) return
+        if (!queueSelectionConnected) {
+            queueSelectionConnected = true
+            project.messageBus.connect(this).subscribe(com.intellij.openapi.fileEditor.FileEditorManagerListener.FILE_EDITOR_MANAGER,
+                object : com.intellij.openapi.fileEditor.FileEditorManagerListener {
+                    override fun selectionChanged(event: com.intellij.openapi.fileEditor.FileEditorManagerEvent) {
+                        completedQueue.selectionChanged(AirPaneActivity.read(event.newFile)?.identity)
+                    }
+                })
+        }
+        timer.start(); startEtaHistory(); pollPane()
+    }
     fun dismiss() {
         state.dismiss()
         val file = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()
@@ -111,7 +155,11 @@ class ReelService(private val project: Project) : Disposable {
     private fun pollPane() {
         if (disposed || project.isDisposed) return
         val manager = FileEditorManager.getInstance(project)
-        val panes = manager.openFiles.mapNotNull { file -> AirPaneActivity.read(file)?.let { file to it } }
+        val panes = manager.openFiles.mapNotNull { file -> AirPaneActivity.read(file)?.let { file to it } }.distinctBy { it.second.identity }
+        queueFiles = panes.associate { (file, activity) -> activity.identity to file }
+        val advanceTo = completedQueue.observe(panes.map { (file, activity) -> QueuePane(activity, file.presentableName) }, selectedThread(), System.nanoTime() / 1_000_000)
+        publishQueue()
+        if (advanceTo != null) openQueued(advanceTo)
         (recapViews.keys + recapOffers.keys + latestTurns.keys).toSet().filter {
             it !in manager.openFiles || service<ReelSettings>().recapMode == RecapMode.NEVER
         }.forEach(::clearRecap)
@@ -219,6 +267,7 @@ class ReelService(private val project: Project) : Disposable {
     override fun dispose() {
         disposed = true
         timer.stop()
+        queueListeners.clear()
         narrator.dispose()
         eta?.let { monitor -> etaGuard { monitor.close(System.currentTimeMillis()) } }
         val application = ApplicationManager.getApplication()

@@ -84,3 +84,11 @@ The Play button is hidden until both video and speech audio can play. Playback s
 ## Agent ETA
 
 Reel Break logs agent sessions locally and, when "Use ETA to time breaks" is on, uses past stretches to show time left and skip breaks for very short stretches. `src/test/resources/eta/seed-history.example.jsonl` and `seed-history.demo-short.jsonl` are synthetic demo data for trying the badge and skip behaviour, so any ETA evaluation (`./gradlew evaluateEta`) must use real session logs, not these files.
+
+## Completed agent queue
+
+The **Completed agents** tool window on the right queues newly completed prompts in finish order, even in background tabs. Each entry shows its thread name and elapsed prompt time (including permission waits). `~` marks a prompt that was already running when first observed, so its earlier time is unknown. Existing completed conversations are not added on startup.
+
+**Review next** opens the front entry; **Review** opens a selected entry. A completion in your current tab also enters this review flow without switching tabs. Starting a new prompt there removes the old entry and opens the next waiting thread. Switching tabs manually disarms automatic advancement; browsing a result never acknowledges it. **✓ Done** and **Remove from queue** both dismiss that completion without sending anything to the agent. If it is your current thread, they advance to the next entry. A later completed prompt on the same thread is added again. **Move up / Move down** change review order without switching tabs. Closing a thread removes its queued result; the queue never reopens closed tabs.
+
+The queue is project-local and lasts for the IDE session. Completions seen in the same 200 ms observation use open-tab order as a tie-breaker. No prompt is submitted automatically. A running turn must be observed before its completion can be queued.

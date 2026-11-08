@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Completed agents sidebar with finish-order review queue, per-prompt elapsed time, acknowledgement/removal, manual reordering, and tab-aware next-agent handoff.
 - Agent ETA groundwork: read-only agent state tracking, a local JSONL session log under the IDE system directory, stretch history with an optional seed file, and advisory ETA logging. No UI change.
 - ETA-driven breaks (setting "Use ETA to time breaks", default on): skips the break for stretches predicted to end within seconds (and opens it late if the stretch runs longer than usual), shows an "~N min left" badge in the break header, and "Wrapping up…" when the agent is nearly done.
 - Initial scaffold created from [IntelliJ Platform Plugin Template](https://github.com/JetBrains/intellij-platform-plugin-template)
