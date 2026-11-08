@@ -103,7 +103,7 @@ class ReelSettingsConfigurable(private val settingsProvider: () -> ReelSettings 
             row("Background video:", video)
             row("", JBLabel("<html>A complete video URL or an absolute path to a local video.</html>"))
             row("Voice ID:", voice)
-            row("", JBLabel("<html>Uses your ElevenLabs voice and API key.<br>Completed responses are sent to ElevenLabs for narration.</html>"))
+            row("", JBLabel("<html>Uses the hosted narration service; no local API key is needed.<br>Completed responses are sent through the service to ElevenLabs.</html>"))
         }
         fun updateRecapFields() {
             val enabled = mode.selectedItem != RecapMode.NEVER
