@@ -8,7 +8,6 @@ import com.github.zakgrivell.invadetheburg.settings.FavoriteWebsite
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Font
-import java.awt.FlowLayout
 import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.RenderingHints
@@ -63,12 +62,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         })
     }
     private var view: JPanel? = null
-    private val etaBadge = EtaBadge()
-    // Own row under the header buttons so a narrow pane can never squeeze or clip the badge.
-    private val etaBadgeRow = JPanel(FlowLayout(FlowLayout.LEFT, 8, 3)).apply {
-        isVisible = false
-        add(etaBadge)
-    }
+    private val etaBadge = EtaBadge().apply { isVisible = false }
     private var updatingSwitcher = false
     private var switcherItems: List<FavoriteWebsite> = emptyList()
     private val websiteSwitcher = JComboBox<FavoriteWebsite>().apply {
@@ -116,12 +110,12 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
 
     val isShowing: Boolean get() = isVisible
 
-    /** Null hides the badge row. Safe to call every poll; it only re-lays out on change. */
+    /** Null hides the badge. Safe to call every poll; it only re-lays out on change. */
     fun setEtaBadge(text: String?) {
-        val changed = (text != null && etaBadge.text != text) || etaBadgeRow.isVisible != (text != null)
+        val changed = (text != null && etaBadge.text != text) || etaBadge.isVisible != (text != null)
         if (!changed) return
         if (text != null) etaBadge.text = text
-        etaBadgeRow.isVisible = text != null
+        etaBadge.isVisible = text != null
         view?.revalidate()
         view?.repaint()
     }
@@ -150,14 +144,12 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
                     add(JPanel(BorderLayout()).apply {
                         add(JBLabel("  Reel Break · v$version"), BorderLayout.CENTER)
                         add(JPanel().apply {
+                            add(etaBadge)
                             add(websiteSwitcher)
                             add(JButton("Settings").apply { addActionListener { settings() } })
                             add(workButton)
                         }, BorderLayout.EAST)
                     }, BorderLayout.NORTH)
-                    // The native browser below is a heavyweight component that would hide anything drawn over it,
-                    // so the badge sits in the header, on its own row, not on the video.
-                    add(etaBadgeRow, BorderLayout.SOUTH)
                 }, BorderLayout.NORTH)
                 add(browser.component, BorderLayout.CENTER)
             }
