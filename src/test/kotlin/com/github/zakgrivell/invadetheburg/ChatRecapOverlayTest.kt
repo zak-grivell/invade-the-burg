@@ -36,6 +36,12 @@ class ChatRecapOverlayTest {
                 assertTrue(overlay.prepareOver(editor))
                 assertFalse(active)
                 assertTrue(root.layeredPane.getComponentsInLayer(JLayeredPane.MODAL_LAYER).single().bounds.maxX < 0)
+                overlay.showOver(editor)
+                overlay.hide()
+                assertFalse(active)
+                assertTrue("Navigating away during preload must leave no recap over chat",
+                    root.layeredPane.getComponentsInLayer(JLayeredPane.MODAL_LAYER).single().bounds.maxX < 0)
+                activations = 0
                 fake.ready = true
                 overlay.showOver(editor)
                 val views = root.layeredPane.getComponentsInLayer(JLayeredPane.MODAL_LAYER)

@@ -54,7 +54,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
     private var completionStarted = 0L
     val isFinishing: Boolean get() = popupPanel.isVisible &&
         (System.nanoTime() - completionStarted) / 1_000_000 < COMPLETION_HOLD_MS
-    val isVisible: Boolean get() = view?.isVisible == true
+    val isVisible: Boolean get() = !warming && view?.isVisible == true
     private val popupPanel = JPanel(java.awt.GridBagLayout()).apply {
         background = javax.swing.UIManager.getColor("Panel.background") ?: Color.DARK_GRAY
         add(JBLabel("All done! Returning to chat…").apply {
@@ -114,7 +114,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         override fun dispose() {}
     }
 
-    val isShowing: Boolean get() = view?.isVisible == true
+    val isShowing: Boolean get() = isVisible
 
     /** Null hides the badge row. Safe to call every poll; it only re-lays out on change. */
     fun setEtaBadge(text: String?) {
@@ -126,20 +126,13 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         view?.repaint()
     }
 
-    private var warmHost: JPanel? = null
+    private var warming = false
     fun prepare(editor: JComponent?, url: String) {
-        val browser = page.prepare(url)
-        val root = editor?.let(SwingUtilities::getRootPane) ?: return
-        if (warmHost != null || view != null) return
-        warmHost = JPanel(BorderLayout()).apply {
-            setBounds(-802, 0, 800, 600)
-            add(browser.component, BorderLayout.CENTER)
-            root.layeredPane.add(this, JLayeredPane.DEFAULT_LAYER, 0)
-            doLayout()
-        }
+        page.prepare(url)
+        if (editor != null && view == null) showOver(editor, url, preparing = true)
     }
 
-    fun showOver(editor: JComponent, url: String): Boolean {
+    fun showOver(editor: JComponent, url: String, preparing: Boolean = false): Boolean {
         cancelCompletion()
         hideReturnButton()
         val root = SwingUtilities.getRootPane(editor) ?: return false
@@ -148,7 +141,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         val visible = SwingUtilities.convertRectangle(editor, editor.visibleRect, nextLayer)
             .intersection(Rectangle(0, 0, nextLayer.width, nextLayer.height))
         if (visible.width <= 0 || visible.height <= 0) return false
-        val browser = page.show(url)
+        val browser = if (preparing) page.prepare(url) else page.show(url)
         updateSwitcher(url)
         if (view == null) {
             view = JPanel(BorderLayout()).apply {
@@ -168,8 +161,6 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
                 }, BorderLayout.NORTH)
                 add(browser.component, BorderLayout.CENTER)
             }
-            warmHost?.let { it.parent?.remove(it) }
-            warmHost = null
         }
         if (layer !== nextLayer) {
             layer?.remove(view)
@@ -178,11 +169,14 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
             // Use the constraints overload: Kotlin otherwise selects add(Component, index).
             nextLayer.add(view, JLayeredPane.PALETTE_LAYER, 0)
         }
-        if (view!!.bounds != visible) {
-            view!!.bounds = visible
+        val bounds = if (preparing) Rectangle(-visible.width - 2, visible.y, visible.width, visible.height) else visible
+        if (view!!.bounds != bounds) {
+            view!!.bounds = bounds
             view!!.revalidate()
+            view!!.doLayout()
             view!!.repaint()
         }
+        warming = preparing
         view!!.isVisible = true
         return true
     }
@@ -248,6 +242,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
         hideReturnButton()
         cancelCompletion()
         page.hide()
+        if (warming) return
         if (view?.isVisible != true) return
         view?.isVisible = false
         layer?.revalidate()
@@ -255,8 +250,7 @@ internal class ReelOverlay(private val dismiss: () -> Unit, private val resume: 
     }
 
     override fun dispose() {
-        warmHost?.let { it.parent?.remove(it) }
-        warmHost = null
+        warming = false
         hide()
         page.dispose()
         returnLayer?.remove(returnButton)

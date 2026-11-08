@@ -68,7 +68,15 @@ internal class SystemBreakPage(url: String, private val ownsPlaybackControls: Bo
         view.addJavascriptCallback("reelBreakRecapReady") { SwingUtilities.invokeLater { if (!disposed) { ready = true; preloading = false; pushVisibility() } } }
         // One-way document lifecycle notification; no page code awaits a Java Promise.
         view.addJavascriptCallback("reelBreakDocumentReady") {
-            SwingUtilities.invokeLater { if (!disposed) { if (!ownsPlaybackControls) preloading = false; pushVisibility() } }
+            SwingUtilities.invokeLater {
+                if (!disposed) {
+                    if (!ownsPlaybackControls && preloading) {
+                        Logger.getLogger(SystemBreakPage::class.java.name).info("Reel Break: retained browser document loaded")
+                        preloading = false
+                    }
+                    pushVisibility()
+                }
+            }
         }
         view.addJavascriptCallback("reelBreakPlaybackFailure") { details ->
             Logger.getLogger(SystemBreakPage::class.java.name).log(Level.INFO, "Break playback failure: {0}", details)

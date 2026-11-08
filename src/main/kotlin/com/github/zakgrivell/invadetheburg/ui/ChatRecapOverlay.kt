@@ -68,7 +68,11 @@ internal class ChatRecapOverlay(private val media: RecapMedia, private val dismi
         view.isVisible = true
         activate(true)
     }
-    fun hide() { if (ready || closed) view.isVisible = false; activate(false) }
+    fun hide() {
+        activate(false)
+        if (ready || closed) view.isVisible = false
+        else view.setLocation(-view.width - 2, view.y)
+    }
     override fun dispose() {
         closed = true
         activate(false); page?.dispose(); page = null; media.close()
