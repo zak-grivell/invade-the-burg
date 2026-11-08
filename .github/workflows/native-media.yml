@@ -25,6 +25,7 @@ jobs:
           distribution: zulu
           java-version: '25'
       - uses: gradle/actions/setup-gradle@v6
+      - uses: ./.github/actions/prepare-gradle
       - name: Install Linux browser runtime and media decoders
         if: runner.os == 'Linux'
         run: |

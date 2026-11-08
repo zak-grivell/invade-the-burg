@@ -7,6 +7,7 @@ import java.net.InetSocketAddress
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executors
 import javax.swing.JFrame
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
@@ -16,6 +17,10 @@ object NativeMediaSmoke {
     @JvmStatic fun main(args: Array<String>) {
         val sample = Files.readAllBytes(Path.of("build/media-smoke/h264-aac.mp4"))
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        // Browsers can keep an outgoing range response open while requesting the next video.
+        // The default single server thread makes those independent streams block each other.
+        val requests = Executors.newCachedThreadPool()
+        server.executor = requests
         server.createContext("/video.mp4") { exchange ->
             val range = exchange.requestHeaders.getFirst("Range")?.removePrefix("bytes=")?.split("-")
             val start = range?.getOrNull(0)?.toIntOrNull() ?: 0
@@ -139,7 +144,17 @@ object NativeMediaSmoke {
                         handedOff = eval("const v=document.getElementById('probe'); return !window.handoffError && v && v.currentSrc.includes('?handoff=$transition') && !v.paused && v.currentTime > 0.1 ? 1 : 0;") == "1"
                     }
                 }
-                check(handedOff) { "Site-owned scroll handoff $transition was interrupted: " + eval("return window.handoffError;") }
+                check(handedOff) { "Site-owned scroll handoff $transition was interrupted: " + eval("""
+                    const describe = v => v && ({id:v.id, src:v.currentSrc, paused:v.paused,
+                        time:v.currentTime, readyState:v.readyState, networkState:v.networkState,
+                        error:v.error && {code:v.error.code,message:v.error.message},
+                        buffered:Array.from({length:v.buffered.length},(_,i)=>[v.buffered.start(i),v.buffered.end(i)])});
+                    return {playError:window.handoffError, hidden:document.hidden,
+                        pluginHidden:window.__reelBreakMediaState && window.__reelBreakMediaState.hidden,
+                        outgoing:describe(document.getElementById('probe')),
+                        incoming:describe(document.getElementById('incoming')),
+                        failures:window.__reelBreakMediaState && window.__reelBreakMediaState.failures};
+                """.trimIndent()) }
             }
             println("PASS: 12 consecutive site-owned scroll-snap handoffs without autoplay attributes, retries, or clicks.")
             eval("document.getElementById('probe').pause(); return 1;")
@@ -160,6 +175,7 @@ object NativeMediaSmoke {
         } finally {
             SwingUtilities.invokeAndWait { if (pageCreated) page.dispose(); if (frameCreated) frame.dispose() }
             server.stop(0)
+            requests.shutdownNow()
         }
     }
 }
