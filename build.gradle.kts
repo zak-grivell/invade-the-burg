@@ -34,7 +34,7 @@ tasks.named("build").configure { dependsOn("buildPlugin") }
 val mediaSmokeRuntime = configurations.create("mediaSmokeRuntime")
 dependencies {
     add(mediaSmokeRuntime.name, "org.jetbrains.kotlin:kotlin-stdlib:2.4.21")
-    implementation("ca.weblite:webview:1.13.0")
+    implementation("ca.weblite:webview:1.14.0")
     testImplementation("junit:junit:4.13.2")
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
